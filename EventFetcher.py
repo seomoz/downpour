@@ -1,15 +1,18 @@
 #! /usr/bin/env python
 
 import pycurl					# We need to talk to curl
-import pyev
-import signal
-import socket
-import time
+import pyev						# Our event model
+import signal					# For sigint, etc.
+import socket					# We'll create a socket for curl so we can watch it
+import time						# For some sleeping
+import logging
 from cStringIO import StringIO	# To fake file descriptors into strings
+
+logger = logging.getLogger('downpour')
 
 class Request(object):
 	def __init__(self, url, fetcher):
-		print 'Request'
+		logger.debug('Request object for %s' % url)
 		self.url     = url
 		self.fetcher = fetcher
 		self.loop    = fetcher.loop
@@ -32,10 +35,10 @@ class Request(object):
 	# Override these
 	################
 	def onSuccess(self, c, contents):
-		print 'Successfully fetched %s' % self.url
+		logging.debug('Successfully fetched %s' % self.url)
 	
 	def onError(self, c, contents):
-		print 'Error fetching %s' % self.url
+		logging.debug('Error fetching %s' % self.url)
 	
 	################
 	# The actual callbacks
@@ -51,14 +54,11 @@ class Request(object):
 	#################
 	def socket(self, family, socktype, protocol):
 		'''Undocumented in stupid pycurl documentation. Found in test scripts'''
-		print 'Watching socket.'
+		logging.debug('Watching socket for %s' % self.url)
 		self.sock = socket.socket(family, socktype, protocol)
 		self.watcher = pyev.Io(self.sock._sock, pyev.EV_READ | pyev.EV_WRITE, self.loop, self.io)
 		self.watcher.start()
 		return self.sock
-	
-	def debug(self, type, message):
-		print 'Debug: %s' % message
 	
 	#################
 	# libev callbacks
@@ -177,8 +177,9 @@ class Fetcher(object):
 			self.error(c)
 	
 	def checkQueue(self):
-		while len(self.pool):
-			print 'Requesting...'
+		while len(self.queue) and len(self.pool):
+			#logger.info('Remaining in queue: %i' % len(self.queue))
+			logger.debug('Handle available. Making request.')
 			# If we have requests and handles to spare,
 			req = self.pop()
 			if req == None:
@@ -189,7 +190,6 @@ class Fetcher(object):
 			c.setopt(pycurl.URL, c.request.url)
 			# When you create a socket, we must register it!
 			c.setopt(pycurl.OPENSOCKETFUNCTION, c.request.socket)
-			c.setopt(pycurl.DEBUGFUNCTION, c.request.debug)
 			c.setopt(pycurl.WRITEFUNCTION, c.fp.write)
 			self.numInFlight += 1
 			self.multi.add_handle(c)

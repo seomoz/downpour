@@ -5,8 +5,10 @@
 import heapq					# We'll use a heap to efficiently implement the queue
 import time						# For to implement politeness
 import urlparse					# To efficiently parse URLs
+import logging
 import EventFetcher as Fetcher	# We'll piggy-back off of the existing infrastructure
-import logging					# Early integration of logging is good
+
+logger = logging.getLogger('downpour')
 
 class PoliteFetcher(Fetcher.Fetcher):
 	# How long should we wait before making a request to the same tld?
@@ -71,8 +73,7 @@ class PoliteFetcher(Fetcher.Fetcher):
 			if time.time() > q['time']:
 				# Update it to mark that a url here is in flight
 				q['time'] = self.infinity
-				logging.debug('Returning %s' % next[1])
-				print 'Popping off the queue'
+				logger.debug('Returning %s' % next[1])
 				try:
 					return q['queue'].pop(0)
 				except IndexError:
@@ -80,7 +81,7 @@ class PoliteFetcher(Fetcher.Fetcher):
 			else:
 				# Put this pld back into the queue
 				heapq.heappush(self.queue, (cutoff, next[1]))
-				logging.debug('Asking %s to wait' % next[1])
+				logger.debug('Asking %s to wait' % next[1])
 		return None
 	
 	def push(self, req):
