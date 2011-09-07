@@ -195,7 +195,7 @@ class Fetcher(object):
 		
 	def error(self, c, errno, errmsg):
 		logger.debug('%s : (%i) %s' % (c.request.url, errno, errmsg))
-		if c.request.retries >= c.request.MAX_RETRIES:
+		if c.request.retries <= c.request.MAX_RETRIES:
 			t = c.request.scale ** c.request.retries
 			logger.debug('Request for %s sleeping %i' % (c.url, t))
 			time.sleep(t)
