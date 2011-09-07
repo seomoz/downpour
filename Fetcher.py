@@ -5,130 +5,284 @@
 # Based on the example at:
 # http://pycurl.cvs.sourceforge.net/pycurl/pycurl/examples/retriever-multi.py?view=markup
 
+import pyev
 import pycurl					# We need to talk to curl
+import signal
+import socket
 import logging					# Early integration of logging is good
+import urlparse
 from cStringIO import StringIO	# To fake file descriptors into strings
 
-try:
-	import signal
-	signal.signal(signal.SIGPIPE, signal.SIG_IGN)
-except ImportError:
-	logging.warn("Failed to import signal.")
+# Our logger
+logger = logging.getLogger('downpour')
+# Signals that are equivalent of stopping
+SIGSTOP = (signal.SIGPIPE, signal.SIGINT, signal.SIGTERM)
+# The loop we'll be using for everything
+loop = pyev.default_loop()
+
+class Request(object):
+	retryMax   = 5
+	retryBase  = 2
+	retryScale = 1
+	
+	def __init__(self, url):
+		self.url       = url
+		self.sock      = None
+		self.fetcher   = None
+		self.ioWatcher = pyev.Io(0, pyev.EV_READ | pyev.EV_WRITE, loop, self.io)
+		# For backing off for retrying:
+		# scale * (base ** retries)
+		self.retries   = 0
+	
+	def success(self, c, content):
+		pass
+	
+	def error(self, c, errno, errmsg):
+		pass
+
+	#################
+	# curl callbacks
+	#################
+	def socket(self, family, socktype, protocol):
+		'''Pycurl wants a socket, so make one, watch it and return it.'''
+		logger.debug('Watching socket for %s' % self.url)
+		self.sock = socket.socket(family, socktype, protocol)
+		self.ioWatcher.stop()
+		self.ioWatcher.set(self.sock, pyev.EV_READ | pyev.EV_WRITE)
+		self.ioWatcher.start()
+		return self.sock
+
+	#################
+	# libev callbacks
+	#################
+	def io(self, watcher, revents):
+		#logger.debug('IO Event')
+		# Temporarily stop our watcher, call, then restart
+		self.ioWatcher.stop()
+		self.fetcher.socketAction(self.sock.fileno())
+		self.ioWatcher.start()
 
 class Fetcher(object):
 	def __init__(self, poolSize = 10):
-		'''Create a pool of curl handlers, and create an empty queue of requests'''
-		self.poolSize = poolSize			# Number of connections to use
-		self.queue = []						# The queue of (url, filehandler)
-		self.multi = pycurl.CurlMulti()		# Our multicurler
-		self.multi.handles = []				# Allocate a pool of curl handlers
-		for i in range(self.poolSize):
+		# Go ahead and make a curl multi handle
+		self.multi = pycurl.CurlMulti()
+		self.multi.setopt(pycurl.M_TIMERFUNCTION, self.curlTimer)
+		self.multi.setopt(pycurl.M_SOCKETFUNCTION, self.curlSocket)
+		# Make a sharing option for DNS stuff
+		self.share = pycurl.CurlShare()
+		self.share.setopt(pycurl.SH_SHARE, pycurl.LOCK_DATA_DNS)
+		# A queue of our requests, and the number of requests in flight
+		self.queue = []
+		self.retryQueue = []
+		self.num = 0
+		# Now instantiate a pool of easy handles
+		self.pool = []
+		for i in range(poolSize):
 			c = pycurl.Curl()
+			# It will need a file to write to
 			c.fp = None
+			# Set some options
+			c.setopt(pycurl.CONNECTTIMEOUT, 15)
 			c.setopt(pycurl.FOLLOWLOCATION, 1)
+			c.setopt(pycurl.SHARE, self.share)
+			c.setopt(pycurl.FRESH_CONNECT, 1)
+			c.setopt(pycurl.FORBID_REUSE, 1)
 			c.setopt(pycurl.MAXREDIRS, 5)
-			c.setopt(pycurl.CONNECTTIMEOUT, 30)
-			c.setopt(pycurl.TIMEOUT, 300)
+			c.setopt(pycurl.TIMEOUT, 15)
 			c.setopt(pycurl.NOSIGNAL, 1)
-			self.multi.handles.append(c)
-		self.pool = self.multi.handles[:]	# Set a list of all the free curl handles
-		self.numInFlight = 0
+			# Now add it to the pool
+			self.pool.append(c)
+		self.multi.handles = self.pool[:]
+		# Now listen for certain events
+		self.signalWatchers = [pyev.Signal(sig, loop, self.signal) for sig in SIGSTOP]
+		self.timerWatcher = pyev.Timer(1000.0, 0.0, loop, self.timer)
+		#self.timeoutTimer = pyev.Timer(60.0, 60.0, loop, self.checkTimeouts)
 	
 	def __del__(self):
 		'''Clean up the pool of curl handlers we allocated'''
-		logging.info('Cleaning up')
-		for c in self.multi.handles:
+		logger.info('Cleaning up')
+		for c in self.pool:
 			if c.fp is not None:
 				c.fp.close()
 				c.fp = None
 			c.close()
 		self.multi.close()
-	
+
+	#################
+	# Inheritance Interface
+	#################
 	def __len__(self):
-		'''How many URLs are still unfetched'''
-		return len(self.queue) + self.numInFlight
-	
+		return self.num + len(self.queue)
+
+	def extend(self, requests):
+		self.queue.extend(requests)
+		self.serveNext()
+
 	def pop(self):
-		'''Get the next (url, success, error) tuple'''
+		'''Get the next request'''
 		return self.queue.pop(0)
-	
-	def push(self, url, success, error=None):
-		'''Queue a (url, success, error) tuple request'''
-		self.queue.append((url, success, error))
-	
-	def onsuccess(self, c):
-		'''We successfully fetched a url. Provides the curl handle'''
-		logging.info('Success: %s => %s' % (c.url, c.getinfo(pycurl.EFFECTIVE_URL)))
-	
-	def onerror(self, c, errno, errmsg):
-		'''We failed to fetch a url. Provides the curl handle'''
-		logging.error('Failed: %s => %i : %s' % (c.url, errno, errmsg))
-	
-	def run(self, daemonize=False):
-		'''Run through the list we have to fetch. If daemonize, run indefinitely'''
-		while len(self) or daemonize:
-			# Add all as many requests as we have space for
-			while len(self) and self.pool:
-				c = self.pool.pop()
-				try:
-					# Try to get the next thing to fetch
-					c.url, c.success, c.error = self.pop()
-				except (IndexError, TypeError):
-					# If there's nothing to be fetched, then 
-					self.pool.append(c)
-					logging.info('Nothing else we can fetch.')
-					break
-				c.fp = StringIO()
-				c.setopt(pycurl.URL, c.url)
-				c.setopt(pycurl.WRITEFUNCTION, c.fp.write)
-				self.multi.add_handle(c)
-				self.numInFlight += 1
-				logging.debug('Requesting ' + c.url)
-			# Perform the multi_perform
-			while 1:
-				ret, numHandles = self.multi.perform()
-				if ret != pycurl.E_CALL_MULTI_PERFORM:
-					break
-			# Now check for terminated handles
-			while 1:
-				numQ, okList, errList = self.multi.info_read()
-				# Go through all the successful handles
-				for c in okList:
-					# Call the success callback handler
-					c.success(c, c.fp.getvalue())
-					c.fp.close()
-					c.fp = None
-					self.multi.remove_handle(c)
-					self.numInFlight -= 1
-					self.pool.append(c)
-					self.onsuccess(c)
-				# Go through all the failed handles
-				for c, errno, errmsg in errList:
-					# Call the error handler if it exists
-					if c.error:
-						c.error(c, errno, errmsg)
-					c.fp.close()
-					c.fp = None
-					self.multi.remove_handle(c)
-					self.numInFlight -= 1
-					self.pool.append(c)
-					self.onerror(c, errno, errmsg)
-				# Update the count of the urls we've processed
-				if numQ == 0:
-					break
-			# No more I/O pending. You can do some CPU stuff here if you'd like
-			self.multi.select(1.0)
 
-def success(c, contents):
-	logging.info('%s contains %s' % (c.url, contents[0:100]))
+	def push(self, r):
+		'''Queue a request'''
+		self.queue.append(r)
+		self.serveNext()
+	
+	def onSuccess(self, c):
+		pass
+	
+	def onError(self, c):
+		pass
+	
+	def onDone(self, c):
+		pass
+	
+	#################
+	# Our interface
+	#################
+	def start(self):
+		logger.info('Starting fetcher...')
+		for w in self.signalWatchers:
+			w.start()
+		self.serveNext()
+		loop.start()
+	
+	def stop(self):
+		logger.info('Stopping fetcher...')
+		for w in self.signalWatchers:
+			w.stop()
+		loop.stop()
 
-def error(c, errno, errmsg):
-	logging.error('ZOMG FAILED! for %s' % (c.url))
+	#################
+	# libev callbacks
+	#################
+	def signal(self, watcher, revents):
+		logger.info('Signal caught')
+		self.stop()
+	
+	def timer(self, watcher, revents):
+		logger.info('Timer fired')
+		self.multi.perform()
+	
+	def retry(self, watcher, revents):
+		try:
+			c = self.retryQueue.pop()
+			logger.info('Retrying %s' % c.request.url)
+			self.serve(c, c.request)
+		except ValueError:
+			logger.warn('Tried popping off empty retryQueue')
+	
+	#################
+	# handle complete
+	#################
+	def success(self, c):
+		content = c.fp.getvalue()
+		logger.debug('Success %s => %s...' % (c.request.url, content[0:100]))
+		c.request.success(c, c.fp.getvalue())
+		self.onSuccess(c)
+		self.done(c)
+	
+	def error(self, c, errno, errmsg):
+		if c.request.retries <= c.request.retryMax:
+			# Append it to the list to retry
+			r = c.request
+			t = r.retryScale * (r.retryBase ** r.retries)
+			c.request.retries += 1
+			logger.debug('Retrying %s in %is' % (r.url, t))
+			self.retryQueue.append(c)
+			self.multi.remove_handle(c)
+			c.timer = pyev.Timer(t, 0, loop, self.retry)
+			c.timer.start()
+		else:
+			logger.debug('Error %s => (%i) %s' % (c.request.url, errno, errmsg))
+			c.request.error(c, errno, errmsg)
+			self.onError(c)
+			self.done(c)
+	
+	def done(self, c):
+		logger.debug('Done with %s' % c.request.url)
+		self.onDone(c)
+		c.fp.close()
+		c.fp = None
+		self.pool.append(c)
+		self.multi.remove_handle(c)
+		self.serveNext()
+		
+	#################
+	# curl callbacks
+	#################
+	def curlTimer(self, timeout):
+		t = timeout / 1000.0
+		if t < self.timerWatcher.remaining():
+			logger.debug('Resetting timer to fire in %fs' % t)
+			self.timerWatcher.stop()
+			self.timerWatcher.set(t, 1.0)
+			self.timerWatcher.start()
+	
+	def curlSocket(self, sock, action, userp, socketp):
+		pass
+	
+	def socketAction(self, socket):
+		ret, num = self.multi.perform()
+		if num < self.num:
+			logger.info('%i < %i => one or more handles has completed' % (num, self.num))
+			self.infoRead()
+			
+	def infoRead(self):
+		#logger.debug('Checking with curl for finished handlers')
+		num, ok, err = self.multi.info_read()
+		logger.debug('infoRead : %i <=> %i' % (num, self.num))
+		self.num = num
+		for c in ok:
+			# Handle successulf
+			self.success(c)
+		for c, errno, errmsg in err:
+			# Handle failed
+			self.error(c, errno, errmsg)
+
+	def serveNext(self):
+		while len(self.queue) and len(self.pool):
+			# While there are requests to service, and handles to service them
+			logger.debug('Queue : %i\tPool: %i' % (len(self.queue), len(self.pool)))
+			# Look for the next request
+			r = self.pop()
+			if r == None:
+				# pop() can return None to signal there are no more
+				break
+			# Get a handle, and attach a request and fp to it
+			c = self.pool.pop()
+			self.serve(c, r)
+		self.multi.perform()
+	
+	def serve(self, c, r):
+		# The request should know who the fetcher is
+		r.fetcher = self
+		c.request = r
+		c.fp = StringIO()
+		# Set some options
+		c.setopt(pycurl.URL, c.request.url)
+		c.setopt(pycurl.HTTPHEADER, ['Host: %s' % urlparse.urlparse(r.url).hostname])
+		c.setopt(pycurl.OPENSOCKETFUNCTION, c.request.socket)
+		c.setopt(pycurl.WRITEFUNCTION, c.fp.write)
+		# Indicate that we have one more in flight
+		self.num += 1
+		self.multi.add_handle(c)
+		self.multi.socket_action(pycurl.SOCKET_TIMEOUT, 0)
+		self.multi.perform()		
 
 if __name__ == '__main__':
-	logging.basicConfig(level=logging.DEBUG)
-	f = Fetcher()
-	f.push('http://google.com', success, error)
-	f.push('http://yahoo.com', success, error)
-	f.push('http://lwkjerpiu20983094822.com', success, error)
-	f.run()
+	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+	handler   = logging.StreamHandler()
+	handler.setLevel(logging.DEBUG)
+	handler.setFormatter(formatter)
+	logger.addHandler(handler)
+	handler = logging.FileHandler('downpour.log', 'w+')
+	handler.setLevel(logging.DEBUG)
+	handler.setFormatter(formatter)
+	logger.addHandler(handler)
+	logger.setLevel(logging.DEBUG)
+	f = file('urls.txt')
+	urls = f.read().strip().split()
+	f.close()
+	f = Fetcher(20)
+	f.extend([Request(url) for url in urls])
+	f.start()

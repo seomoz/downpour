@@ -208,7 +208,7 @@ class Fetcher(object):
 		if c.request.retries <= c.request.MAX_RETRIES:
 			t = c.request.scale ** c.request.retries
 			logger.debug('Request for %s sleeping %i' % (c.request.url, t))
-			time.sleep(t)
+			pyev.sleep(t)
 			c.fp.close()
 			c.fp = StringIO()
 			c.setopt(pycurl.WRITEFUNCTION, c.fp.write)
