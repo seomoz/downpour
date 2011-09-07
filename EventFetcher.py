@@ -99,7 +99,7 @@ class Fetcher(object):
 		self.pool = self.multi.handles[:]
 		SIGSTOP = (signal.SIGPIPE, signal.SIGINT, signal.SIGTERM)
 		self.watchers = [pyev.Signal(sig, self.loop, self.signal) for sig in SIGSTOP]
-		self.watchers.append(pyev.Timer(0, 1.0, self.loop, self.timer))
+		self.evTimer = pyev.Timer(0, 1.0, self.loop, self.timer)
 		#self.watchers.append(pyev.Idle(self.loop, self.idle))
 	
 	#################
@@ -132,8 +132,10 @@ class Fetcher(object):
 		self.stop()
 	
 	def timer(self, watcher, revents):
+		self.evTimer.stop()
 		logger.debug('Timer fired!')
-		self.check()
+		self.multi.perform()
+		self.evTimer.start()
 	
 	#################
 	# Service
@@ -142,6 +144,7 @@ class Fetcher(object):
 		logger.info('Starting...')
 		for watcher in self.watchers:
 			watcher.start()
+		self.evTimer.start()
 		self.checkQueue()
 		self.loop.start()
 	
@@ -150,6 +153,7 @@ class Fetcher(object):
 		self.loop.stop(pyev.EVBREAK_ALL)
 		while self.watchers:
 			self.watchers.pop().stop()
+		self.evTimer.stop()
 		self.loop.stop()
 	
 	#################
@@ -174,6 +178,14 @@ class Fetcher(object):
 		c.request.success(c, c.fp.getvalue())
 		self.onSuccess(c)
 		self.done(c)
+	
+	#################
+	# libcurl callbacks
+	#################
+	def rescheduleTimer(self, multi, timeout):
+		self.evTimer.stop()
+		self.evTimer.set(timeout / 1000.0, 0)
+		self.evTimer.start()
 		
 	def error(self, c, errno, errmsg):
 		logger.debug('%s : (%i) %s' % (c.request.url, errno, errmsg))
@@ -244,8 +256,10 @@ if __name__ == '__main__':
 	handler.setFormatter(formatter)
 	logger.addHandler(handler)
 	logger.setLevel(logging.DEBUG)
-	urls = ['http://google.com', 'http://wikipedia.org', 'http://yahoo.com', 'http://amazon.com', 'http://dan.lecocq.us']
-	f = Fetcher()
+	f = file('urls.txt')
+	urls = f.read().strip().split()
+	f.close()
+	f = Fetcher(20)
 	f.extend(Request(url) for url in urls)
 	f.start()
 	
