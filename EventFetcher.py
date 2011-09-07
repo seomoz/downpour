@@ -188,7 +188,7 @@ class Fetcher(object):
 	def rescheduleTimer(self, timeout):
 		if timeout > 0:
 			self.evTimer.stop()
-			self.evTimer.set(timeout / 1000.0, 5.0)
+			self.evTimer.set(timeout / 1000.0, 0)
 			self.evTimer.start()
 		else:
 			self.evTimer.reset()
@@ -229,6 +229,7 @@ class Fetcher(object):
 			for c, errno, errmsg in errList:
 				# Handle failed
 				self.error(c, errno, errmsg)
+		self.evTimer.reset()
 	
 	def checkQueue(self):
 		while len(self.queue) and len(self.pool):
@@ -260,6 +261,7 @@ class Fetcher(object):
 		now = time.time()
 		for c in self.multi.handles:
 			if c.timeout and c.timeout < now:
+				logger.debug('Application timeout')
 				self.multi.socket_action(pycurl.SOCKET_TIMEOUT, 0)
 				break
 
