@@ -185,10 +185,13 @@ class Fetcher(object):
 	#################
 	# libcurl callbacks
 	#################
-	def rescheduleTimer(self, multi, timeout):
-		self.evTimer.stop()
-		self.evTimer.set(timeout / 1000.0, 0)
-		self.evTimer.start()
+	def rescheduleTimer(self, timeout):
+		if timeout > 0:
+			self.evTimer.stop()
+			self.evTimer.set(timeout / 1000.0, 5.0)
+			self.evTimer.start()
+		else:
+			self.evTimer.reset()
 		
 	def error(self, c, errno, errmsg):
 		logger.debug('%s : (%i) %s' % (c.request.url, errno, errmsg))
