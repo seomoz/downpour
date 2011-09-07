@@ -7,6 +7,7 @@ import socket					# We'll create a socket for curl so we can watch it
 import time						# For some sleeping
 import urlparse					# To efficiently parse URLs
 import logging
+
 from cStringIO import StringIO	# To fake file descriptors into strings
 
 logger = logging.getLogger('downpour')
@@ -78,6 +79,7 @@ class Fetcher(object):
 		self.multi = pycurl.CurlMulti()
 		self.multi.handles = []
 		self.multi.setopt(pycurl.M_SOCKETFUNCTION, self.socket)
+		self.multi.setopt(pycurl.M_TIMERFUNCTION, self.rescheduleTimer)
 		self.share = pycurl.CurlShare()
 		self.share.setopt(pycurl.SH_SHARE, pycurl.LOCK_DATA_DNS)
 		self.poolSize = poolSize
@@ -86,10 +88,10 @@ class Fetcher(object):
 		self.numInFlight = 0
 		for i in range(self.poolSize):
 			c = pycurl.Curl()
-			c.kickstarted = False
+			c.timeout = None
 			c.setopt(pycurl.FOLLOWLOCATION, 1)
 			c.setopt(pycurl.MAXREDIRS, 5)
-			c.setopt(pycurl.CONNECTTIMEOUT, 30)
+			c.setopt(pycurl.CONNECTTIMEOUT, 15)
 			c.setopt(pycurl.TIMEOUT, 300)
 			c.setopt(pycurl.NOSIGNAL, 1)
 			c.setopt(pycurl.FRESH_CONNECT, 1)
@@ -135,6 +137,7 @@ class Fetcher(object):
 		self.evTimer.stop()
 		logger.debug('Timer fired!')
 		self.multi.perform()
+		self.checkTimeouts()
 		self.evTimer.start()
 	
 	#################
@@ -208,6 +211,7 @@ class Fetcher(object):
 		self.onDone(c)
 		c.fp.close()
 		c.fp = None
+		c.timeout = 0
 		self.pool.append(c)
 		self.numInFlight -= 1
 		self.multi.remove_handle(c)
@@ -243,11 +247,18 @@ class Fetcher(object):
 			c.setopt(pycurl.WRITEFUNCTION, c.fp.write)
 			self.numInFlight += 1
 			self.multi.add_handle(c)
-			if not c.kickstarted:
+			if c.timeout == None:
 				logger.debug('Kickstarting...')
 				self.multi.socket_action(pycurl.SOCKET_TIMEOUT, 0)
-				c.kickstarted = True
+			c.timeout = time.time() + 15.0
 			self.multi.perform()
+	
+	def checkTimeouts(self):
+		now = time.time()
+		for c in self.multi.handles:
+			if c.timeout and c.timeout < now:
+				self.multi.socket_action(pycurl.SOCKET_TIMEOUT, 0)
+				break
 
 if __name__ == '__main__':
 	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
