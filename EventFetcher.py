@@ -102,6 +102,7 @@ class Fetcher(object):
 		SIGSTOP = (signal.SIGPIPE, signal.SIGINT, signal.SIGTERM)
 		self.watchers = [pyev.Signal(sig, self.loop, self.signal) for sig in SIGSTOP]
 		self.evTimer = pyev.Timer(0, 1.0, self.loop, self.timer)
+		self.timeoutTimer = pyev.Timer(60.0, 60.0, self.loop, self.checkTimeouts)
 		#self.watchers.append(pyev.Idle(self.loop, self.idle))
 	
 	#################
@@ -137,18 +138,26 @@ class Fetcher(object):
 		self.evTimer.stop()
 		logger.debug('Timer fired!')
 		self.multi.perform()
-		self.checkTimeouts()
 		self.evTimer.start()
+	
+	def checkTimeouts(self, watcher, revents):
+		now = time.time()
+		for c in self.multi.handles:
+			if c.timeout and c.timeout < now:
+				logger.debug('Application timeout')
+				self.multi.socket_action(pycurl.SOCKET_TIMEOUT, 0)
+				break
 	
 	#################
 	# Service
 	#################
 	def start(self):
 		logger.info('Starting...')
+		self.checkQueue()
 		for watcher in self.watchers:
 			watcher.start()
 		self.evTimer.start()
-		self.checkQueue()
+		self.timeoutTimer.start()
 		self.loop.start()
 	
 	def stop(self):
@@ -157,6 +166,7 @@ class Fetcher(object):
 		while self.watchers:
 			self.watchers.pop().stop()
 		self.evTimer.stop()
+		self.timeoutTimer.stop()
 		self.loop.stop()
 	
 	#################
@@ -197,7 +207,7 @@ class Fetcher(object):
 		logger.debug('%s : (%i) %s' % (c.request.url, errno, errmsg))
 		if c.request.retries <= c.request.MAX_RETRIES:
 			t = c.request.scale ** c.request.retries
-			logger.debug('Request for %s sleeping %i' % (c.url, t))
+			logger.debug('Request for %s sleeping %i' % (c.request.url, t))
 			time.sleep(t)
 			c.fp.close()
 			c.fp = StringIO()
@@ -256,14 +266,6 @@ class Fetcher(object):
 				self.multi.socket_action(pycurl.SOCKET_TIMEOUT, 0)
 			c.timeout = time.time() + 15.0
 			self.multi.perform()
-	
-	def checkTimeouts(self):
-		now = time.time()
-		for c in self.multi.handles:
-			if c.timeout and c.timeout < now:
-				logger.debug('Application timeout')
-				self.multi.socket_action(pycurl.SOCKET_TIMEOUT, 0)
-				break
 
 if __name__ == '__main__':
 	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
