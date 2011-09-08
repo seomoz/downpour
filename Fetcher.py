@@ -234,7 +234,7 @@ class Fetcher(object):
 	def curlSocket(self, sock, action, userp, socketp):
 		pass
 	
-	def socketAction(self, socket):
+	def socketAction(self, sock):
 		try:
 			ret, num = self.multi.perform()
 			if num < self.num:
