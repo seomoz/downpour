@@ -158,7 +158,11 @@ class Fetcher(object):
 		for w in self.signalWatchers:
 			w.start()
 		self.serveNext()
-		loop.start()
+		while True:
+			try:
+				loop.start()
+			except OSError as e:
+				logger.error('OSError in loop: %s' % repr(e))
 	
 	def stop(self):
 		logger.info('Stopping fetcher...')
@@ -239,7 +243,11 @@ class Fetcher(object):
 	def perform(self):
 		try:
 			return self.multi.perform()
+		except socket.error as e:
+			logger.error('Socket error: %s' % repr(e))
 		except OSError as e:
+			logger.error('OSError: %s' % repr(e))
+		except Exception as e:
 			logger.error(repr(e))
 	
 	def socketAction(self, sock):
@@ -249,15 +257,21 @@ class Fetcher(object):
 				logger.info('%i < %i => one or more handles has completed' % (num, self.num))
 				self.infoRead()
 		except socket.error as e:
-			logger.error('%s' % repr(e))
+			logger.error('Socket error: %s' % repr(e))
 		except OSError as e:
+			logger.error('OSError: %s' % repr(e))
+		except Exception as e:
 			logger.error('%s' % repr(e))
 			
 	def infoRead(self):
 		#logger.debug('Checking with curl for finished handlers')
 		try:
 			num, ok, err = self.multi.info_read()
+		except socket.error as e:
+			logger.error('Socket error: %s' % repr(e))
 		except OSError as e:
+			logger.error('OSError: %s' % repr(e))
+		except Exception as e:
 			logger.error('%s' % repr(e))
 			return
 		logger.debug('infoRead : %i <=> %i' % (num, self.num))
