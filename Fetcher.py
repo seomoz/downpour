@@ -234,10 +234,15 @@ class Fetcher(object):
 		pass
 	
 	def socketAction(self, socket):
-		ret, num = self.multi.perform()
-		if num < self.num:
-			logger.info('%i < %i => one or more handles has completed' % (num, self.num))
-			self.infoRead()
+		try:
+			ret, num = self.multi.perform()
+			if num < self.num:
+				logger.info('%i < %i => one or more handles has completed' % (num, self.num))
+				self.infoRead()
+		except socket.error as e:
+			logger.error('%s' % repr(e))
+		except OSError as e:
+			logger.error('%s' % repr(e))
 			
 	def infoRead(self):
 		#logger.debug('Checking with curl for finished handlers')
