@@ -45,6 +45,9 @@ class Request(object):
 	
 	def error(self, c, errno, errmsg):
 		pass
+	
+	def done(self):
+		self.sock.close()
 
 	#################
 	# curl callbacks
@@ -66,9 +69,9 @@ class Request(object):
 	def io(self, watcher, revents):
 		#logger.debug('IO Event')
 		# Temporarily stop our watcher, call, then restart
-		self.ioWatcher.stop()
+		#self.ioWatcher.stop()
 		self.fetcher.socketAction(self.sock.fileno())
-		self.ioWatcher.start()
+		#self.ioWatcher.start()
 
 class Fetcher(object):
 	def __init__(self, poolSize = 10):
@@ -211,6 +214,7 @@ class Fetcher(object):
 		self.onDone(c)
 		c.fp.close()
 		c.fp = None
+		c.request.done()
 		self.pool.append(c)
 		self.multi.remove_handle(c)
 		self.serveNext()
