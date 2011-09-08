@@ -175,7 +175,7 @@ class Fetcher(object):
 	
 	def timer(self, watcher, revents):
 		logger.info('Timer fired')
-		self.multi.perform()
+		self.perform()
 	
 	def retry(self, watcher, revents):
 		try:
@@ -201,7 +201,6 @@ class Fetcher(object):
 			r = c.request
 			t = r.retryScale * (r.retryBase ** r.retries)
 			c.request.retries += 1
-			c.request.done()
 			logger.debug('Retrying %s in %is (%s)' % (r.url, t, errmsg))
 			self.retryQueue.append(c)
 			self.multi.remove_handle(c)
@@ -236,6 +235,12 @@ class Fetcher(object):
 	
 	def curlSocket(self, sock, action, userp, socketp):
 		pass
+	
+	def perform(self):
+		try:
+			return self.multi.perform()
+		except OSError as e:
+			logger.error(repr(e))
 	
 	def socketAction(self, sock):
 		try:
@@ -272,7 +277,7 @@ class Fetcher(object):
 			# Get a handle, and attach a request and fp to it
 			c = self.pool.pop()
 			self.serve(c, r)
-		self.multi.perform()
+		self.perform()
 	
 	def serve(self, c, r):
 		# The request should know who the fetcher is
@@ -288,7 +293,7 @@ class Fetcher(object):
 		self.num += 1
 		self.multi.add_handle(c)
 		self.multi.socket_action(pycurl.SOCKET_TIMEOUT, 0)
-		self.multi.perform()		
+		self.perform()		
 
 if __name__ == '__main__':
 	handler   = logging.StreamHandler()
