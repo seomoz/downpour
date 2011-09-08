@@ -198,6 +198,7 @@ class Fetcher(object):
 			r = c.request
 			t = r.retryScale * (r.retryBase ** r.retries)
 			c.request.retries += 1
+			c.request.done()
 			logger.debug('Retrying %s in %is (%s)' % (r.url, t, errmsg))
 			self.retryQueue.append(c)
 			self.multi.remove_handle(c)
