@@ -6,7 +6,7 @@ import heapq					# We'll use a heap to efficiently implement the queue
 import time						# For to implement politeness
 import urlparse					# To efficiently parse URLs
 import logging
-import EventFetcher as Fetcher	# We'll piggy-back off of the existing infrastructure
+import Fetcher as Fetcher		# We'll piggy-back off of the existing infrastructure
 
 logger = logging.getLogger('downpour')
 
@@ -54,7 +54,7 @@ class PoliteFetcher(Fetcher.Fetcher):
 			except KeyError:
 				self.plds[key] = {'queue':[r], 'time':t}
 				heapq.heappush(self.queue, (t, key))
-		self.checkQueue()
+		self.serveNext()
 		
 	def pop(self):
 		'''Get the next (url, success, error) tuple'''
@@ -92,5 +92,5 @@ class PoliteFetcher(Fetcher.Fetcher):
 		except KeyError:
 			self.plds[key] = {'queue':[req], 'time':int(time.time())}
 			heapq.heappush(self.queue, (int(time.time()), key))
-		self.checkQueue()
+		self.serveNext()
 	

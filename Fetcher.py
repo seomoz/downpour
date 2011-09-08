@@ -20,8 +20,14 @@ SIGSTOP = (signal.SIGPIPE, signal.SIGINT, signal.SIGTERM)
 # The loop we'll be using for everything
 loop = pyev.default_loop()
 
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler = logging.FileHandler('downpour.log', 'w+')
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
 class Request(object):
-	retryMax   = 5
+	retryMax   = 3
 	retryBase  = 2
 	retryScale = 1
 	
@@ -46,6 +52,8 @@ class Request(object):
 	def socket(self, family, socktype, protocol):
 		'''Pycurl wants a socket, so make one, watch it and return it.'''
 		logger.debug('Watching socket for %s' % self.url)
+		if self.sock:
+			self.sock.close()
 		self.sock = socket.socket(family, socktype, protocol)
 		self.ioWatcher.stop()
 		self.ioWatcher.set(self.sock, pyev.EV_READ | pyev.EV_WRITE)
@@ -187,7 +195,7 @@ class Fetcher(object):
 			r = c.request
 			t = r.retryScale * (r.retryBase ** r.retries)
 			c.request.retries += 1
-			logger.debug('Retrying %s in %is' % (r.url, t))
+			logger.debug('Retrying %s in %is (%s)' % (r.url, t, errmsg))
 			self.retryQueue.append(c)
 			self.multi.remove_handle(c)
 			c.timer = pyev.Timer(t, 0, loop, self.retry)
@@ -270,12 +278,7 @@ class Fetcher(object):
 		self.multi.perform()		
 
 if __name__ == '__main__':
-	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 	handler   = logging.StreamHandler()
-	handler.setLevel(logging.DEBUG)
-	handler.setFormatter(formatter)
-	logger.addHandler(handler)
-	handler = logging.FileHandler('downpour.log', 'w+')
 	handler.setLevel(logging.DEBUG)
 	handler.setFormatter(formatter)
 	logger.addHandler(handler)
