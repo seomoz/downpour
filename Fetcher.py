@@ -47,7 +47,10 @@ class Request(object):
 		pass
 	
 	def done(self):
-		self.sock.close()
+		try:
+			self.sock.close()
+		except AttributeError as e:
+			logger.error(repr(e))
 
 	#################
 	# curl callbacks
