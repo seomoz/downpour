@@ -255,7 +255,11 @@ class Fetcher(object):
 			
 	def infoRead(self):
 		#logger.debug('Checking with curl for finished handlers')
-		num, ok, err = self.multi.info_read()
+		try:
+			num, ok, err = self.multi.info_read()
+		except OSError as e:
+			logger.error('%s' % repr(e))
+			return
 		logger.debug('infoRead : %i <=> %i' % (num, self.num))
 		self.num = num
 		for c in ok:
