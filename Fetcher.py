@@ -34,12 +34,9 @@ class Request(object):
 		self.sock      = None
 		self.fetcher   = None
 		self.ioWatcher = pyev.Io(0, pyev.EV_READ | pyev.EV_WRITE, loop, self.io)
-		# For backing off for retrying:
-		# scale * (base ** retries)
-		self.retries   = 0
 	
 	def backoff(self, retries):
-		return self.retryScale * (self.retryBase ** retries)
+		return 2 * (2 ** retries)
 	
 	def success(self, c, content):
 		pass
@@ -66,10 +63,7 @@ class Request(object):
 	#################
 	def io(self, watcher, revents):
 		#logger.debug('IO Event')
-		# Temporarily stop our watcher, call, then restart
-		#self.ioWatcher.stop()
 		self.fetcher.socketAction(self.sock.fileno())
-		#self.ioWatcher.start()
 
 class Fetcher(object):
 	def __init__(self, poolSize = 10):
@@ -83,6 +77,7 @@ class Fetcher(object):
 		# A queue of our requests, and the number of requests in flight
 		self.queue = []
 		self.retryQueue = []
+		self.processQueue = []
 		self.num = 0
 		# Now instantiate a pool of easy handles
 		self.pool = []
@@ -105,7 +100,7 @@ class Fetcher(object):
 		# Now listen for certain events
 		self.signalWatchers = [pyev.Signal(sig, loop, self.signal) for sig in SIGSTOP]
 		self.timerWatcher = pyev.Timer(1000.0, 0.0, loop, self.timer)
-		#self.timeoutTimer = pyev.Timer(60.0, 60.0, loop, self.checkTimeouts)
+		self.idleWatcher  = pyev.Idle(loop, self.idle)
 	
 	def __del__(self):
 		'''Clean up the pool of curl handlers we allocated'''
@@ -161,9 +156,11 @@ class Fetcher(object):
 	
 	def stop(self):
 		logger.info('Stopping fetcher...')
+		loop.stop()
 		for w in self.signalWatchers:
 			w.stop()
-		loop.stop()
+		self.idleWatcher.stop()
+		self.timerWatcher.stop()
 
 	#################
 	# libev callbacks
@@ -184,41 +181,52 @@ class Fetcher(object):
 		except ValueError:
 			logger.warn('Tried popping off empty retryQueue')
 	
+	def idle(self, watcher, revents):
+		try:
+			# Get the next request to process...
+			f, args = self.processQueue.pop()
+			f(*args)
+			c = args[0]
+			self.pool.append(c)
+			self.serveNext()
+		except IndexError:
+			self.idleWatcher.stop()
+	
 	#################
 	# handle complete
 	#################
 	def success(self, c):
 		content = c.fp.getvalue()
 		logger.debug('Success %s => %s...' % (c.request.url, content[0:100]))
-		c.request.success(c, c.fp.getvalue())
+		self.processQueue.append((c.request.success, (c, c.fp.getvalue())))
 		self.onSuccess(c)
 		self.done(c)
 	
 	def error(self, c, errno, errmsg):
-		if c.request.retries < c.request.retryMax:
-			# Append it to the list to retry
-			r = c.request
-			t = r.retryScale * (r.retryBase ** r.retries)
-			c.request.retries += 1
-			logger.debug('Retrying %s in %is (%s)' % (r.url, t, errmsg))
+		if c.retries < c.request.retryMax:
+			c.retries += 1
+			t = c.request.backoff(c.retries)
+			logger.debug('Retrying %s in %is (%s)' % (c.request.url, t, errmsg))
 			self.retryQueue.append(c)
 			self.multi.remove_handle(c)
 			c.timer = pyev.Timer(t, 0, loop, self.retry)
 			c.timer.start()
 		else:
 			logger.debug('Error %s => (%i) %s' % (c.request.url, errno, errmsg))
-			c.request.error(c, errno, errmsg)
+			self.processQueue.append((c.request.error, (c, errno, errmsg)))
 			self.onError(c)
 			self.done(c)
 	
 	def done(self, c):
-		logger.debug('Done with %s' % c.request.url)
+		# logger.debug('Done with %s' % c.request.url)
 		self.onDone(c)
 		c.fp.close()
 		c.fp = None
-		self.pool.append(c)
+		self.num -= 1
 		self.multi.remove_handle(c)
-		self.serveNext()
+		# Start the idle watcher if it's not active
+		if not self.idleWatcher.active:
+			self.idleWatcher.start()
 		
 	#################
 	# curl callbacks
@@ -246,9 +254,9 @@ class Fetcher(object):
 	
 	def socketAction(self, sock):
 		try:
-			ret, num = self.multi.perform()
+			ret, num = self.multi.socket_action(sock, 0)
 			if num < self.num:
-				logger.info('%i < %i => one or more handles has completed' % (num, self.num))
+				logger.info('%i handles completed' % (self.num - num))
 				self.infoRead()
 		except socket.error as e:
 			logger.error('Socket error: %s' % repr(e))
@@ -268,8 +276,6 @@ class Fetcher(object):
 		except Exception as e:
 			logger.error('%s' % repr(e))
 			return
-		logger.debug('infoRead : %i <=> %i' % (num, self.num))
-		self.num = num
 		for c in ok:
 			# Handle successulf
 			self.success(c)
@@ -296,6 +302,7 @@ class Fetcher(object):
 		r.fetcher = self
 		c.request = r
 		c.fp = StringIO()
+		c.retries = 0
 		# Set some options
 		c.setopt(pycurl.URL, c.request.url)
 		c.setopt(pycurl.HTTPHEADER, ['Host: %s' % urlparse.urlparse(r.url).hostname])
