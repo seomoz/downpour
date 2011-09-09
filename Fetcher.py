@@ -11,6 +11,7 @@ import signal
 import socket
 import logging					# Early integration of logging is good
 import urlparse
+import threading
 from cStringIO import StringIO	# To fake file descriptors into strings
 
 # Our logger
@@ -77,7 +78,9 @@ class Fetcher(object):
 		# A queue of our requests, and the number of requests in flight
 		self.queue = []
 		self.retryQueue = []
+		# Background processing
 		self.processQueue = []
+		self.processor = threading.Thread(target=self.process)
 		self.num = 0
 		# Now instantiate a pool of easy handles
 		self.pool = []
@@ -99,8 +102,7 @@ class Fetcher(object):
 		self.multi.handles = self.pool[:]
 		# Now listen for certain events
 		self.signalWatchers = [pyev.Signal(sig, loop, self.signal) for sig in SIGSTOP]
-		self.timerWatcher = pyev.Timer(1000.0, 0.0, loop, self.timer)
-		self.idleWatcher  = pyev.Idle(loop, self.idle)
+		self.timerWatcher = pyev.Timer(10.0, 0.0, loop, self.timer)
 	
 	def __del__(self):
 		'''Clean up the pool of curl handlers we allocated'''
@@ -148,6 +150,7 @@ class Fetcher(object):
 		for w in self.signalWatchers:
 			w.start()
 		self.serveNext()
+		self.processor.start()
 		while True:
 			try:
 				loop.start()
@@ -157,9 +160,9 @@ class Fetcher(object):
 	def stop(self):
 		logger.info('Stopping fetcher...')
 		loop.stop()
+		self.processor.join(1)
 		for w in self.signalWatchers:
 			w.stop()
-		self.idleWatcher.stop()
 		self.timerWatcher.stop()
 
 	#################
@@ -181,16 +184,19 @@ class Fetcher(object):
 		except ValueError:
 			logger.warn('Tried popping off empty retryQueue')
 	
-	def idle(self, watcher, revents):
-		try:
-			# Get the next request to process...
-			f, args = self.processQueue.pop()
-			f(*args)
-			c = args[0]
-			self.pool.append(c)
-			self.serveNext()
-		except IndexError:
-			self.idleWatcher.stop()
+	def process(self):
+		while True:
+			try:
+				# Get the next request to process...
+				logger.debug('Handling request callback during idle time')
+				f, args = self.processQueue.pop()
+				f(*args)
+				c = args[0]
+				self.pool.append(c)
+				#self.serveNext()
+			except IndexError:
+				logger.debug('Waiting for something to process...')
+				pyev.sleep(1)
 	
 	#################
 	# handle complete
@@ -224,9 +230,6 @@ class Fetcher(object):
 		c.fp = None
 		self.num -= 1
 		self.multi.remove_handle(c)
-		# Start the idle watcher if it's not active
-		if not self.idleWatcher.active:
-			self.idleWatcher.start()
 		
 	#################
 	# curl callbacks
