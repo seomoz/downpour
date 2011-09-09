@@ -28,8 +28,6 @@ logger.addHandler(handler)
 
 class Request(object):
 	retryMax   = 0
-	retryBase  = 2
-	retryScale = 1
 	
 	def __init__(self, url):
 		self.url       = url
@@ -40,18 +38,15 @@ class Request(object):
 		# scale * (base ** retries)
 		self.retries   = 0
 	
+	def backoff(self, retries):
+		return self.retryScale * (self.retryBase ** retries)
+	
 	def success(self, c, content):
 		pass
 	
 	def error(self, c, errno, errmsg):
 		pass
 	
-	def done(self):
-		try:
-			self.sock.close()
-		except AttributeError as e:
-			logger.error(repr(e))
-
 	#################
 	# curl callbacks
 	#################
@@ -99,8 +94,8 @@ class Fetcher(object):
 			c.setopt(pycurl.CONNECTTIMEOUT, 15)
 			c.setopt(pycurl.FOLLOWLOCATION, 1)
 			c.setopt(pycurl.SHARE, self.share)
-			c.setopt(pycurl.FRESH_CONNECT, 1)
-			c.setopt(pycurl.FORBID_REUSE, 1)
+			#c.setopt(pycurl.FRESH_CONNECT, 1)
+			#c.setopt(pycurl.FORBID_REUSE, 1)
 			c.setopt(pycurl.MAXREDIRS, 5)
 			c.setopt(pycurl.TIMEOUT, 15)
 			c.setopt(pycurl.NOSIGNAL, 1)
@@ -221,7 +216,6 @@ class Fetcher(object):
 		self.onDone(c)
 		c.fp.close()
 		c.fp = None
-		c.request.done()
 		self.pool.append(c)
 		self.multi.remove_handle(c)
 		self.serveNext()
