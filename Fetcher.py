@@ -27,7 +27,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 class Request(object):
-	retryMax   = 3
+	retryMax   = 0
 	retryBase  = 2
 	retryScale = 1
 	
@@ -200,7 +200,7 @@ class Fetcher(object):
 		self.done(c)
 	
 	def error(self, c, errno, errmsg):
-		if c.request.retries <= c.request.retryMax:
+		if c.request.retries < c.request.retryMax:
 			# Append it to the list to retry
 			r = c.request
 			t = r.retryScale * (r.retryBase ** r.retries)
