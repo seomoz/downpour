@@ -174,7 +174,7 @@ class Fetcher(object):
 	
 	def timer(self, watcher, revents):
 		logger.info('Timer fired')
-		self.perform()
+		self.serveNext()
 	
 	def retry(self, watcher, revents):
 		try:
@@ -287,7 +287,7 @@ class Fetcher(object):
 			self.error(c, errno, errmsg)
 
 	def serveNext(self):
-		while len(self.queue) and len(self.pool):
+		while len(self.pool) and len(self):
 			# While there are requests to service, and handles to service them
 			logger.debug('Queue : %i\tPool: %i' % (len(self.queue), len(self.pool)))
 			# Look for the next request
