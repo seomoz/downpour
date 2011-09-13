@@ -16,9 +16,9 @@ class PoliteFetcher(Fetcher.Fetcher):
 	# Infinity, because there's not another easy way to access it?
 	infinity = float('Inf')
 	
-	def __init__(self, poolSize=10):
+	def __init__(self, poolSize=10, threaded=True):
 		# Call the parent constructor
-		super(PoliteFetcher,self).__init__(poolSize)
+		super(PoliteFetcher,self).__init__(poolSize, threaded)
 		self.plds = {}
 		self.queue = []
 		

@@ -67,7 +67,7 @@ class Request(object):
 		self.fetcher.socketAction(self.sock.fileno())
 
 class Fetcher(object):
-	def __init__(self, poolSize = 10):
+	def __init__(self, poolSize = 10, threaded=True):
 		# Go ahead and make a curl multi handle
 		self.multi = pycurl.CurlMulti()
 		self.multi.setopt(pycurl.M_TIMERFUNCTION, self.curlTimer)
@@ -79,6 +79,7 @@ class Fetcher(object):
 		self.queue = []
 		self.retryQueue = []
 		# Background processing
+		self.threaded = threaded
 		self.processQueue = []
 		self.processor = threading.Thread(target=self.process)
 		self.num = 0
@@ -150,7 +151,8 @@ class Fetcher(object):
 		for w in self.signalWatchers:
 			w.start()
 		self.serveNext()
-		self.processor.start()
+		if self.threaded:
+			self.processor.start()
 		while True:
 			try:
 				loop.start()
@@ -160,7 +162,8 @@ class Fetcher(object):
 	def stop(self):
 		logger.info('Stopping fetcher...')
 		loop.stop()
-		self.processor.join(1)
+		if self.threaded:
+			self.processor.join(1)
 		for w in self.signalWatchers:
 			w.stop()
 		self.timerWatcher.stop()
@@ -174,7 +177,7 @@ class Fetcher(object):
 	
 	def timer(self, watcher, revents):
 		logger.info('Timer fired')
-		self.serveNext()
+		self.perform()
 	
 	def retry(self, watcher, revents):
 		try:
@@ -204,9 +207,16 @@ class Fetcher(object):
 	def success(self, c):
 		content = c.fp.getvalue()
 		logger.debug('Success %s => %s...' % (c.request.url, content[0:100]))
-		self.processQueue.append((c.request.success, (c, c.fp.getvalue())))
-		self.onSuccess(c)
-		self.done(c)
+		if self.threaded:
+			self.processQueue.append((c.request.success, (c, c.fp.getvalue())))
+			self.onSuccess(c)
+			self.done(c)
+		else:
+			self.request.success(c, c.fp.getvalue())
+			self.pool.append(c)
+			self.onSuccess(c)
+			self.done(c)
+			self.serveNext()
 	
 	def error(self, c, errno, errmsg):
 		if c.retries < c.request.retryMax:
@@ -219,9 +229,16 @@ class Fetcher(object):
 			c.timer.start()
 		else:
 			logger.debug('Error %s => (%i) %s' % (c.request.url, errno, errmsg))
-			self.processQueue.append((c.request.error, (c, errno, errmsg)))
-			self.onError(c)
-			self.done(c)
+			if self.threaded:
+				self.processQueue.append((c.request.error, (c, errno, errmsg)))
+				self.onError(c)
+				self.done(c)
+			else:
+				self.request.error(c, errno, errmsg)
+				self.pool.append(c)
+				self.onError(c)
+				self.done(c)
+				self.serveNext()
 	
 	def done(self, c):
 		# logger.debug('Done with %s' % c.request.url)
