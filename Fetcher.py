@@ -200,6 +200,9 @@ class Fetcher(object):
 			except IndexError:
 				logger.debug('Waiting for something to process...')
 				pyev.sleep(1)
+			except SystemError as e:
+				logger.error(repr(e))
+				pyev.sleep(1)
 	
 	#################
 	# handle complete
