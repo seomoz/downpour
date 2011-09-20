@@ -23,6 +23,8 @@ from twisted.internet import ssl
 class BaseRequest(client.HTTPClientFactory):
 	def __init__(self, url, timeout=15, redirectLimit=10):
 		client.HTTPClientFactory.__init__(self, url, agent='SEOmoz Twisted Crawler', timeout=timeout, followRedirect=1, redirectLimit=redirectLimit)
+		self.response = None
+		self.failure  = None
 	
 	# Inheritable callbacks. You don't need to worry about
 	# returning anything. Just go ahead and do what you need
@@ -33,22 +35,14 @@ class BaseRequest(client.HTTPClientFactory):
 	def onHeaders(self, headers):
 		pass
 	
-	# Finished
-	def done(self, response):
-		return response
-
-	# Made contact
-	def success(self, response):
-		print 'Fetched %s' % self.url
-		return response
-
-	# Failed to made contact
-	def error(self, failure):
-		if failure:
-			print 'FAILED %s' % self.url
-			return failure
-		else:
-			return None
+	def onSuccess(self, text):
+		pass
+	
+	def onError(self, failure):
+		pass
+	
+	def onDone(self, response):
+		pass
 	
 	# Internal callbacks. These interface with twisted, and
 	# are, frankly, a little weird to work with. They *do*
@@ -63,6 +57,24 @@ class BaseRequest(client.HTTPClientFactory):
 	def gotHeaders(self, headers):
 		self.onHeaders(headers)
 		return client.HTTPClientFactory.gotHeaders(self, headers)
+	
+	# Finished
+	def done(self, response):
+		self.response = response
+		self.onDone(response)
+		return self
+
+	# Made contact
+	def success(self, response):
+		self.response = response
+		self.onSuccess(response)
+		return self
+
+	# Failed to made contact
+	def error(self, failure):
+		self.failure = failure
+		self.onError(failure)
+		return self
 
 class BaseFetcher(object):
 	def __init__(self, poolSize, urls):
@@ -77,7 +89,7 @@ class BaseFetcher(object):
 		self.serveNext()
 	
 	def done(self, response):
-		print '%i left in flight' % self.numFlight
+		print '%i left in flight %s' % (self.numFlight, response.url)
 		self.numFlight -= 1
 		self.serveNext()
 		if self.numFlight == 0:
@@ -108,6 +120,6 @@ class BaseFetcher(object):
 				reactor.connectSSL(host, port, r, self.sslContext)
 			else:
 				reactor.connectTCP(host, port, r)
-			r.deferred.addCallback(self.success).addCallback(r.success)
-			r.deferred.addErrback(self.error).addErrback(r.error)
-			r.deferred.addBoth(self.done).addBoth(r.done)
+			r.deferred.addCallback(r.success).addCallback(self.success)
+			r.deferred.addErrback(r.error).addErrback(self.error)
+			r.deferred.addBoth(r.done).addBoth(self.done)
