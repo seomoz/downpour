@@ -77,42 +77,77 @@ class BaseRequest(client.HTTPClientFactory):
 		return self
 
 class BaseFetcher(object):
-	def __init__(self, poolSize, urls):
+	def __init__(self, poolSize, urls=None):
 		self.sslContext = ssl.ClientContextFactory()
-		self.requests = urls
+		self.requests = [] if urls == None else urls
 		self.poolSize = poolSize
 		self.numFlight = 0
-		self.serveNext()
 	
 	def download(self, r):
 		self.requests.append(r)
 		self.serveNext()
 	
+	# This is how subclasses communicate how many requests they have 
+	# left to fulfill. 
+	def __len__(self):
+		return len(self.requests)
+	
+	# This is how we get the next request to service. Return None if there
+	# is no next request to service. That doesn't have to mean that it's done
+	def pop(self):
+		try:
+			return self.requests.pop()
+		except IndexError:
+			return None
+	
+	# These can be overridden to do various post-processing. For example, 
+	# you might want to add more requests, etc.
+	
+	def onDone(self, response):
+		pass
+	
+	def onSuccess(self, response):
+		pass
+	
+	def onError(self, response):
+		pass
+	
+	# These are internal callbacks
 	def done(self, response):
-		print '%i left in flight %s' % (self.numFlight, response.url)
 		self.numFlight -= 1
-		self.serveNext()
-		if self.numFlight == 0:
+		logger.debug('%i left in flight %s' % (self.numFlight, response.url))
+		self.onDone(response)
+		if (self.numFlight == 0) and len(self) == 0:
 			reactor.stop()
+		else:
+			self.serveNext()
 		return response
 	
 	def success(self, response):
-		#print "Success: %s" % repr(response)
+		self.onSuccess(response)
 		return response
 	
-	def error(self, failure):
-		#print "Error: %s" % failure.getErrorMessage()
-		return failure
+	def error(self, response):
+		self.onError(response)
+		return response
 	
+	# These are how you can start and stop the reactor. It's a convenience
+	# so that you don't have to import reactor when you want to use this
 	def start(self):
+		self.serveNext()
 		reactor.run()
 	
 	def stop(self):
 		reactor.stop()
 	
+	# This probably shouldn't be overridden, as it contains the majority
+	# of the logic about how to deploy requests and bind the callbacks.
 	def serveNext(self):
-		while (self.numFlight < self.poolSize) and len(self.requests):
-			r = self.requests.pop()
+		logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
+		while (self.numFlight < self.poolSize) and len(self):
+			r = self.pop()
+			if r == None:
+				break
 			self.numFlight += 1
 			scheme, host, port, path = client._parse(r.url)
 			reactor.connectTCP(host, port, r)
