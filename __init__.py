@@ -33,12 +33,6 @@ class BaseRequest(client.HTTPClientFactory):
 	# Inheritable callbacks. You don't need to worry about
 	# returning anything. Just go ahead and do what you need
 	# to do with the input!
-	def onPage(self, text):
-		pass
-	
-	def onHeaders(self, headers):
-		pass
-	
 	def onSuccess(self, text):
 		pass
 	
@@ -47,20 +41,6 @@ class BaseRequest(client.HTTPClientFactory):
 	
 	def onDone(self, response):
 		pass
-	
-	# Internal callbacks. These interface with twisted, and
-	# are, frankly, a little weird to work with. They *do*
-	# have to return their inherited method's results
-	def page(self, text):
-		self.onPage(text)
-		return client.HTTPClientFactory.page(self, text)
-	
-	def noPage(self, reason):
-		return client.HTTPClientFactory.noPage(self, reason)
-	
-	def gotHeaders(self, headers):
-		self.onHeaders(headers)
-		return client.HTTPClientFactory.gotHeaders(self, headers)
 	
 	# Finished
 	def done(self, response):
