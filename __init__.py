@@ -156,7 +156,6 @@ class BaseFetcher(object):
 				break
 			self.numFlight += 1
 			scheme, host, port, path = client._parse(r.url)
-			reactor.connectTCP(host, port, r)
 			if scheme == 'https':
 				reactor.connectSSL(host, port, r, self.sslContext)
 			else:
