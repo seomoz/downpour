@@ -24,7 +24,7 @@ from twisted.internet import ssl
 import threading
 
 class BaseRequest(client.HTTPClientFactory):
-	def __init__(self, url, timeout=120, redirectLimit=10):
+	def __init__(self, url, timeout=30, redirectLimit=10):
 		client.HTTPClientFactory.__init__(self, url, agent='SEOmoz Twisted Crawler', timeout=timeout, followRedirect=1, redirectLimit=redirectLimit)
 		self.response = None
 		self.failure  = None
