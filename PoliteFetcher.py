@@ -29,7 +29,7 @@ class PoliteFetcher(BaseFetcher):
 	
 	# Event callbacks
 	def onDone(self, request):
-		logger.debug('Done with %s' % request.url)
+		#logger.debug('Done with %s' % request.url)
 		key = self.getKey(request)
 		if len(self.plds[key]):			
 			delay = time.time() + self.wait

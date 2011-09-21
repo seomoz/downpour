@@ -24,10 +24,11 @@ from twisted.internet import ssl
 import threading
 
 class BaseRequest(client.HTTPClientFactory):
-	def __init__(self, url, timeout=15, redirectLimit=10):
+	def __init__(self, url, timeout=120, redirectLimit=10):
 		client.HTTPClientFactory.__init__(self, url, agent='SEOmoz Twisted Crawler', timeout=timeout, followRedirect=1, redirectLimit=redirectLimit)
 		self.response = None
 		self.failure  = None
+		self.timeout  = timeout
 	
 	# Inheritable callbacks. You don't need to worry about
 	# returning anything. Just go ahead and do what you need
@@ -121,8 +122,8 @@ class BaseFetcher(object):
 		self.onDone(response)
 		with self.lock:
 			self.numFlight -= 1
-			logger.debug('%i left in flight %s' % (self.numFlight, response.url))
 			if (self.numFlight == 0) and len(self) == 0:
+				logging.warn('No requests left in flight. Stopping')
 				reactor.stop()
 			else:
 				self.serveNext()
@@ -159,7 +160,7 @@ class BaseFetcher(object):
 			if scheme == 'https':
 				reactor.connectSSL(host, port, r, self.sslContext)
 			else:
-				reactor.connectTCP(host, port, r)
+				reactor.connectTCP(host, port, r, timeout=r.timeout)
 			r.deferred.addCallback(r.success).addCallback(self.success)
 			r.deferred.addErrback(r.error).addErrback(self.error)
 			r.deferred.addBoth(r.done).addBoth(self.done)
