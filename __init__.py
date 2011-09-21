@@ -114,12 +114,7 @@ class BaseFetcher(object):
 			logger.error(repr(e))
 		with self.lock:
 			self.numFlight -= 1
-			if (self.numFlight == 0) and len(self) == 0:
-				logging.warn('No requests left in flight. Stopping')
-				reactor.stop()
-			else:
-				self.serveNext()
-			return response
+		self.serveNext()
 	
 	def success(self, response):
 		try:
@@ -147,17 +142,18 @@ class BaseFetcher(object):
 	# This probably shouldn't be overridden, as it contains the majority
 	# of the logic about how to deploy requests and bind the callbacks.
 	def serveNext(self):
-		logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
-		while (self.numFlight < self.poolSize) and len(self):
-			r = self.pop()
-			if r == None:
-				break
-			self.numFlight += 1
-			scheme, host, port, path = client._parse(r.url)
-			if scheme == 'https':
-				reactor.connectSSL(host, port, r, self.sslContext)
-			else:
-				reactor.connectTCP(host, port, r, timeout=r.timeout)
-			r.deferred.addCallback(r.success).addCallback(self.success)
-			r.deferred.addErrback(r.error).addErrback(self.error)
-			r.deferred.addBoth(r.done).addBoth(self.done)
+		with self.lock:
+			logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
+			while (self.numFlight < self.poolSize) and len(self):
+				r = self.pop()
+				if r == None:
+					break
+				self.numFlight += 1
+				scheme, host, port, path = client._parse(r.url)
+				if scheme == 'https':
+					reactor.connectSSL(host, port, r, self.sslContext)
+				else:
+					reactor.connectTCP(host, port, r, timeout=r.timeout)
+				r.deferred.addCallback(r.success).addCallback(self.success)
+				r.deferred.addErrback(r.error).addErrback(self.error)
+				r.deferred.addBoth(r.done).addBoth(self.done)
