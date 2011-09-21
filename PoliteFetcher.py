@@ -4,9 +4,9 @@
 
 from downpour import BaseFetcher, logger, reactor
 
-import heapq					# We'll use a heap to efficiently implement the queue
 import time						# For to implement politeness
 import urlparse					# To efficiently parse URLs
+from collections import deque	# Thread-safe queue
 
 class PoliteFetcher(BaseFetcher):
 	# How long should we wait before making a request to the same tld?
@@ -18,7 +18,7 @@ class PoliteFetcher(BaseFetcher):
 		# Call the parent constructor
 		super(PoliteFetcher,self).__init__(poolSize)
 		self.plds = {}
-		self.requests = []
+		self.requests = deque()
 		self.extend([] if urls == None else urls)
 		self.timer = None
 		
@@ -33,7 +33,7 @@ class PoliteFetcher(BaseFetcher):
 		key = self.getKey(request)
 		if len(self.plds[key]):			
 			delay = time.time() + self.wait
-			heapq.heappush(self.requests, (delay, key))
+			self.requests.append((delay, key))
 	
 	#################
 	# Insertion to our queue
@@ -46,7 +46,7 @@ class PoliteFetcher(BaseFetcher):
 				self.plds[key].append(r)
 			except KeyError:
 				self.plds[key] = [r]
-				heapq.heappush(self.requests, (t, key))
+				self.requests.append((t, key))
 		self.serveNext()
 		
 	def pop(self):
@@ -55,12 +55,12 @@ class PoliteFetcher(BaseFetcher):
 		while True:
 			# Get the next plds we might want to fetch from
 			try:
-				next = heapq.heappop(self.requests)
+				next = self.requests.popleft()
 			except IndexError:
 				return None
 			# If the next-fetchable is not soon enough, then wait
 			if next[0] > now:
-				heapq.heappush(self.requests, next)
+				self.requests.appendleft(next)
 				# If we weren't waiting, then wait
 				if self.timer == None:
 					logger.debug('Waiting %f seconds' % (next[0] - now))
@@ -84,7 +84,7 @@ class PoliteFetcher(BaseFetcher):
 			self.plds[key].append(req)
 		except KeyError:
 			self.plds[key] = [req]
-			heapq.heappush(self.requests, (time.time(), key))
+			self.requests.append((time.time()), key)
 		self.serveNext()
 	
 if __name__ == '__main__':
