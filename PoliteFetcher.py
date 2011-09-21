@@ -73,7 +73,7 @@ class PoliteFetcher(BaseFetcher):
 					return self.plds[next[1]].pop(0)
 				except IndexError:
 					# This should never happen
-					logger('Popping from an empty pld!')
+					logger.error('Popping from an empty pld!')
 					return None
 		return None
 	
