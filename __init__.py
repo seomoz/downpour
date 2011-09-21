@@ -65,19 +65,28 @@ class BaseRequest(client.HTTPClientFactory):
 	# Finished
 	def done(self, response):
 		self.response = response
-		self.onDone(response)
+		try:
+			self.onDone(response)
+		except Exception as e:
+			logger.error(repr(e))
 		return self
 
 	# Made contact
 	def success(self, response):
 		self.response = response
-		self.onSuccess(response)
+		try:
+			self.onSuccess(response)
+		except Exception as e:
+			logger.error(repr(e))
 		return self
 
 	# Failed to made contact
 	def error(self, failure):
 		self.failure = failure
-		self.onError(failure)
+		try:
+			self.onError(failure)
+		except Exception as e:
+			logger.error(repr(e))
 		return self
 
 class BaseFetcher(object):
@@ -119,7 +128,10 @@ class BaseFetcher(object):
 	
 	# These are internal callbacks
 	def done(self, response):
-		self.onDone(response)
+		try:
+			self.onDone(response)
+		except Exception as e:
+			logger.error(repr(e))
 		with self.lock:
 			self.numFlight -= 1
 			if (self.numFlight == 0) and len(self) == 0:
@@ -130,11 +142,17 @@ class BaseFetcher(object):
 			return response
 	
 	def success(self, response):
-		self.onSuccess(response)
+		try:
+			self.onSuccess(response)
+		except Exception as e:
+			logger.error(repr(e))
 		return response
 	
 	def error(self, response):
-		self.onError(response)
+		try:
+			self.onError(response)
+		except Exception as e:
+			logger.error(repr(e))
 		return response
 	
 	# These are how you can start and stop the reactor. It's a convenience
