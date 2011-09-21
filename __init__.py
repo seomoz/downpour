@@ -21,7 +21,7 @@ except ImportError:
 
 from twisted.web import client, error
 from twisted.internet import ssl
-from collections import deque
+import threading
 
 class BaseRequest(client.HTTPClientFactory):
 	def __init__(self, url, timeout=15, redirectLimit=10):
@@ -84,7 +84,8 @@ class BaseFetcher(object):
 		self.sslContext = ssl.ClientContextFactory()
 		self.requests = [] if urls == None else urls
 		self.poolSize = poolSize
-		self.inFlight = deque()
+		self.numFlight = 0
+		self.lock = threading.Lock()
 	
 	def download(self, r):
 		self.requests.append(r)
@@ -117,16 +118,15 @@ class BaseFetcher(object):
 	
 	# These are internal callbacks
 	def done(self, response):
-		# WARNING: This is NOT representative of what's
-		# actually in flight. Merely a counter.
-		self.inFlight.popleft()
-		logger.debug('%i left in flight %s' % (len(self.inFlight), response.url))
 		self.onDone(response)
-		if (len(self.inFlight) == 0) and len(self) == 0:
-			reactor.stop()
-		else:
-			self.serveNext()
-		return response
+		with self.lock:
+			self.numFlight -= 1
+			logger.debug('%i left in flight %s' % (self.numFlight, response.url))
+			if (self.numFlight == 0) and len(self) == 0:
+				reactor.stop()
+			else:
+				self.serveNext()
+			return response
 	
 	def success(self, response):
 		self.onSuccess(response)
@@ -148,12 +148,12 @@ class BaseFetcher(object):
 	# This probably shouldn't be overridden, as it contains the majority
 	# of the logic about how to deploy requests and bind the callbacks.
 	def serveNext(self):
-		logger.debug('numFlight : %i | len : %i' % (len(self.inFlight), len(self)))
-		while (len(self.inFlight) < self.poolSize) and len(self):
+		logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
+		while (self.numFlight < self.poolSize) and len(self):
 			r = self.pop()
 			if r == None:
 				break
-			self.inFlight.append(r)
+			self.numFlight += 1
 			scheme, host, port, path = client._parse(r.url)
 			reactor.connectTCP(host, port, r)
 			if scheme == 'https':
