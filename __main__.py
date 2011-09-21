@@ -15,4 +15,4 @@ logger.addHandler(handler)
 f = file('urls.txt')
 reqs = [BaseRequest(u) for u in f.read().strip().split('\n')]
 f.close()
-BaseFetcher(20, reqs).start()
+BaseFetcher(10, reqs).start()
