@@ -7,11 +7,13 @@ logger = logging.getLogger('downpour')
 # This tries to import the most efficient reactor 
 # that's available on the system.
 try:
-	from twisted.internet.epollreactor import EPollReactor as reactor
+	from twisted.internet.epollreactor import EPollReactor
+	reactor = EPollReactor()
 	print 'Using epoll reactor'
 except ImportError:
 	try:
-		from twisted.internet.kqreactor import KQueueReactor as reactor
+		from twisted.internet.kqreactor import KQueueReactor
+		reactor = KQueueReactor()
 		print 'Using kqueue reactor'
 	except ImportError:
 		from twisted.internet import reactor
