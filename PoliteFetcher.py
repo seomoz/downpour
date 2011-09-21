@@ -45,7 +45,7 @@ class PoliteFetcher(BaseFetcher):
 			try:
 				self.plds[key].append(r)
 			except KeyError:
-				self.plds[key] = [r]
+				self.plds[key] = deque([r])
 				self.requests.append((t, key))
 		self.serveNext()
 		
@@ -70,7 +70,7 @@ class PoliteFetcher(BaseFetcher):
 				# Unset the timer
 				self.timer = None
 				try:
-					return self.plds[next[1]].pop(0)
+					return self.plds[next[1]].popleft()
 				except IndexError:
 					# This should never happen
 					logger.error('Popping from an empty pld!')
@@ -83,7 +83,7 @@ class PoliteFetcher(BaseFetcher):
 		try:
 			self.plds[key].append(req)
 		except KeyError:
-			self.plds[key] = [req]
+			self.plds[key] = deque([req])
 			self.requests.append((time.time()), key)
 		self.serveNext()
 	
