@@ -47,8 +47,6 @@ class PoliteFetcher(BaseFetcher):
 			except KeyError:
 				self.plds[key] = deque([r])
 				self.requests.append((t, key))
-		if len(request):
-			self.serveNext()
 		
 	def pop(self):
 		'''Get the next (url, success, error) tuple'''
@@ -90,7 +88,6 @@ class PoliteFetcher(BaseFetcher):
 		except KeyError:
 			self.plds[key] = deque([req])
 			self.requests.append((time.time()), key)
-		self.serveNext()
 	
 if __name__ == '__main__':
 	from downpour import BaseRequest
