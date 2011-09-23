@@ -170,7 +170,7 @@ class BaseFetcher(object):
 	# of the logic about how to deploy requests and bind the callbacks.
 	def serveNext(self):
 		with self.lock:
-			elif len(self) == 0:
+			if len(self) == 0:
 				self.stop()
 			logger.debug('Fetching more things!')
 			while (self.numFlight < self.poolSize) and len(self):
