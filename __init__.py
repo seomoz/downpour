@@ -48,10 +48,10 @@ class BaseRequest(client.HTTPClientFactory):
 	# returning anything. Just go ahead and do what you need
 	# to do with the input!
 	def onSuccess(self, text):
-		pass
+		logger.info('Successfully fetched %s' % self.url)
 	
 	def onError(self, failure):
-		pass
+		logger.info('Failed %s => %s' % (self.url.strip(), failure.getErrorMessage()))
 	
 	def onDone(self, response):
 		pass
@@ -137,7 +137,7 @@ class BaseFetcher(object):
 		try:
 			with self.lock:
 				self.numFlight -= 1
-			logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
+				logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
 			self.onDone(response)
 		except Exception as e:
 			logger.error(repr(e))
