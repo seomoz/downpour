@@ -47,7 +47,8 @@ class PoliteFetcher(BaseFetcher):
 			except KeyError:
 				self.plds[key] = deque([r])
 				self.requests.append((t, key))
-		self.serveNext()
+		if len(request):
+			self.serveNext()
 		
 	def pop(self):
 		'''Get the next (url, success, error) tuple'''
