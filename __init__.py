@@ -3,21 +3,20 @@
 # This tries to import the most efficient reactor 
 # that's available on the system.
 try:
-	from twisted.internet.epollreactor import EPollReactor
-	reactor = EPollReactor()
+	from twisted.internet import epollreactor
+	epollreactor.install()
 	print 'Using epoll reactor'
 except ImportError:
 	try:
-		from twisted.internet.kqreactor import KQueueReactor
-		reactor = KQueueReactor()
+		from twisted.internet import kqreactor
+		kqreactor.install()
 		print 'Using kqueue reactor'
 	except ImportError:
-		from twisted.internet import reactor
-		print 'Using select(2) reactor'
+		print 'Using select reactor'
 
+import threading	
 from twisted.web import client, error
-from twisted.internet import ssl
-import threading
+from twisted.internet import reactor, ssl
 
 # Logging
 # We'll have a stream handler and file handler enabled by default, and 
