@@ -144,6 +144,9 @@ class BaseFetcher(object):
 	def serveNext(self):
 		with self.lock:
 			logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
+			if self.numFlight:
+				break
+			logger.debug('Fetching more things!')
 			while (self.numFlight < self.poolSize) and len(self):
 				r = self.pop()
 				if r == None:
