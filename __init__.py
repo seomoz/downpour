@@ -177,7 +177,7 @@ class BaseFetcher(object):
 				r = self.pop()
 				if r == None:
 					break
-				logger.debug('Requesting %s' % r.url)
+				logger.debug('Requesting %s' % r.url.strip())
 				self.numFlight += 1
 				scheme, host, port, path = client._parse(r.url)
 				if scheme == 'https':
