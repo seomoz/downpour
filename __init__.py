@@ -47,10 +47,10 @@ class BaseRequest(client.HTTPClientFactory):
 	# returning anything. Just go ahead and do what you need
 	# to do with the input!
 	def onSuccess(self, text):
-		logger.info('Successfully fetched %s' % self.url)
+		pass
 	
 	def onError(self, failure):
-		logger.info('Failed %s => %s' % (self.url.strip(), failure.getErrorMessage()))
+		pass
 	
 	def onDone(self, response):
 		pass
@@ -71,6 +71,7 @@ class BaseRequest(client.HTTPClientFactory):
 	# Made contact
 	def success(self, response):
 		try:
+			logger.info('Successfully fetched %s' % self.url)
 			self.response = response
 			self.onSuccess(response)
 		except Exception as e:
@@ -84,6 +85,7 @@ class BaseRequest(client.HTTPClientFactory):
 	# Failed to made contact
 	def error(self, failure):
 		try:
+			logger.info('Failed %s => %s' % (self.url.strip(), failure.getErrorMessage()))
 			self.failure = failure
 			self.onError(failure)
 		except Exception as e:
