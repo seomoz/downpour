@@ -25,7 +25,7 @@ class PoliteFetcher(BaseFetcher):
 	def getKey(self, req):
 		# This actually considers the whole domain name, including subdomains, uniquely
 		# This aliasing is just in case we want to change that scheme later, easily
-		return urlparse.urlparse(req.url).hostname
+		return urlparse.urlparse(req.url.strip()).hostname
 	
 	# Event callbacks
 	def onDone(self, request):
@@ -74,7 +74,11 @@ class PoliteFetcher(BaseFetcher):
 					return self.plds[next[1]].popleft()
 				except IndexError:
 					# This should never happen
-					logger.error('Popping from an empty pld!')
+					logger.error('Popping from an empty pld: %s' % next[1])
+					return None
+				except ValueError:
+					# Nor should this ever happen
+					logger.error('Tried to pop from non-existent pld: %s' % next[1])
 					return None
 		return None
 	
