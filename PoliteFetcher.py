@@ -90,7 +90,14 @@ class PoliteFetcher(BaseFetcher):
 	
 if __name__ == '__main__':
 	from downpour import BaseRequest
-	urls = ['http://en.wikipedia.org/wiki/A', 'http://en.wikipedia.org/wiki/B', 'http://en.wikipedia.org/wiki/C', 'http://google.com']
-	reqs = [BaseRequest(u) for u in urls]
-	p = PoliteFetcher(10, reqs)
+	import logging
+	logger.setLevel(logging.DEBUG)
+	
+	f = file('urls.txt')
+	reqs = [BaseRequest(u) for u in f.read().strip().split('\n')]
+	f.close()
+	
+	#urls = ['http://en.wikipedia.org/wiki/A', 'http://en.wikipedia.org/wiki/B', 'http://en.wikipedia.org/wiki/C', 'http://google.com']
+	#reqs = [BaseRequest(u) for u in urls]
+	p = PoliteFetcher(100, reqs)
 	p.start()

@@ -1,9 +1,5 @@
 #! /usr/bin/env python
 
-import logging
-
-logger = logging.getLogger('downpour')
-
 # This tries to import the most efficient reactor 
 # that's available on the system.
 try:
@@ -22,6 +18,24 @@ except ImportError:
 from twisted.web import client, error
 from twisted.internet import ssl
 import threading
+
+# Logging
+# We'll have a stream handler and file handler enabled by default, and 
+# you can select the level of debugging to affect verbosity
+import logging
+logger = logging.getLogger('downpour')
+# Stream handler
+formatter = logging.Formatter('[%(asctime)s] %(levelname)s in %(module)s:%(funcName)s => %(message)s')
+handler = logging.StreamHandler()
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+# File handler to downpour.log
+handler = logging.FileHandler('downpour.log')
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 class BaseRequest(client.HTTPClientFactory):
 	def __init__(self, url, timeout=30, redirectLimit=10):
@@ -44,30 +58,42 @@ class BaseRequest(client.HTTPClientFactory):
 	
 	# Finished
 	def done(self, response):
-		self.response = response
 		try:
+			self.response = response
 			self.onDone(response)
 		except Exception as e:
-			logger.error(repr(e))
-		return self
+			try:
+				logger.error(repr(e))
+			except Exception:
+				logger.error('Unloggable error.')
+		finally:
+			return self
 
 	# Made contact
 	def success(self, response):
-		self.response = response
 		try:
+			self.response = response
 			self.onSuccess(response)
 		except Exception as e:
-			logger.error(repr(e))
-		return self
+			try:
+				logger.error(repr(e))
+			except Exception:
+				logger.error('Unloggable error.')
+		finally:
+			return self
 
 	# Failed to made contact
 	def error(self, failure):
-		self.failure = failure
 		try:
+			self.failure = failure
 			self.onError(failure)
 		except Exception as e:
-			logger.error(repr(e))
-		return self
+			try:
+				logger.error(repr(e))
+			except Exception:
+				logger.error('Unloggable error.')
+		finally:
+			return self
 
 class BaseFetcher(object):
 	def __init__(self, poolSize, urls=None):
@@ -109,12 +135,13 @@ class BaseFetcher(object):
 	# These are internal callbacks
 	def done(self, response):
 		try:
+			with self.lock:
+				self.numFlight -= 1
 			self.onDone(response)
 		except Exception as e:
 			logger.error(repr(e))
-		with self.lock:
-			self.numFlight -= 1
-		self.serveNext()
+		finally:
+			self.serveNext()
 	
 	def success(self, response):
 		try:
