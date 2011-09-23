@@ -137,6 +137,7 @@ class BaseFetcher(object):
 		try:
 			with self.lock:
 				self.numFlight -= 1
+			logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
 			self.onDone(response)
 		except Exception as e:
 			logger.error(repr(e))
@@ -170,7 +171,6 @@ class BaseFetcher(object):
 	# of the logic about how to deploy requests and bind the callbacks.
 	def serveNext(self):
 		with self.lock:
-			logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
 			if self.numFlight:
 				return
 			elif len(self) == 0:
@@ -180,6 +180,7 @@ class BaseFetcher(object):
 				r = self.pop()
 				if r == None:
 					break
+				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
 				scheme, host, port, path = client._parse(r.url)
 				if scheme == 'https':
