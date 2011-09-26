@@ -36,12 +36,14 @@ handler.setLevel(logging.DEBUG)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-class BaseRequest(client.HTTPClientFactory):
-	def __init__(self, url, timeout=30, redirectLimit=10):
-		client.HTTPClientFactory.__init__(self, url, agent='SEOmoz Twisted Crawler', timeout=timeout, followRedirect=1, redirectLimit=redirectLimit)
+class BaseRequest(object):
+	timeout = 30
+	redirectLimit = 10
+	
+	def __init__(self, url):
+		self.url = url
 		self.response = None
 		self.failure  = None
-		self.timeout  = timeout
 	
 	# Inheritable callbacks. You don't need to worry about
 	# returning anything. Just go ahead and do what you need
@@ -179,13 +181,9 @@ class BaseFetcher(object):
 				r = self.pop()
 				if r == None:
 					break
-				logger.debug('Requesting %s' % r.url.strip())
+				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
-				scheme, host, port, path = client._parse(r.url)
-				if scheme == 'https':
-					reactor.connectSSL(host, port, r, self.sslContext)
-				else:
-					reactor.connectTCP(host, port, r, timeout=r.timeout)
-				r.deferred.addCallback(r.success).addCallback(self.success)
-				r.deferred.addErrback(r.error).addErrback(self.error)
-				r.deferred.addBoth(r.done).addBoth(self.done)
+				d = client.getPage(r.url, agent='SEOmoz Twisted Cralwer', timeout=r.timeout, followRedirect=1, redirectLimit=r.redirectLimit)
+				d.addCallback(r.success).addCallback(self.success)
+				d.addErrback(r.error).addErrback(self.error)
+				d.addBoth(r.done).addBoth(self.done)
