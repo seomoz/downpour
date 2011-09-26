@@ -34,6 +34,8 @@ class PoliteFetcher(BaseFetcher):
 		if len(self.plds[key]):			
 			delay = time.time() + self.wait
 			self.requests.append((delay, key))
+		else:
+			del self.plds[key]
 	
 	#################
 	# Insertion to our queue
