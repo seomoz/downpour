@@ -45,6 +45,9 @@ class BaseRequest(object):
 		self.response = None
 		self.failure  = None
 	
+	def __del__(self):
+		logger.debug('Deleting request for %s' % self.url)
+	
 	# Inheritable callbacks. You don't need to worry about
 	# returning anything. Just go ahead and do what you need
 	# to do with the input!
@@ -58,45 +61,51 @@ class BaseRequest(object):
 		pass
 	
 	# Finished
-	def done(self, response):
+	@staticmethod
+	def done(response, *args, **kwargs):
 		try:
-			self.response = response
-			self.onDone(response)
+			obj = kwargs.get('obj')
+			obj.response = response
+			obj.onDone(response)
 		except Exception as e:
 			try:
 				logger.error(repr(e))
 			except Exception:
 				logger.error('Unloggable error.')
 		finally:
-			return self
+			return obj
 
 	# Made contact
-	def success(self, response):
+	@staticmethod
+	def success(response, *args, **kwargs):
 		try:
-			logger.info('Successfully fetched %s' % self.url)
-			self.response = response
-			self.onSuccess(response)
+			obj = kwargs.get('obj')
+			logger.info('Successfully fetched %s' % obj.url)
+			obj.response = response
+			obj.onSuccess(response)
 		except Exception as e:
 			try:
 				logger.error(repr(e))
 			except Exception:
 				logger.error('Unloggable error.')
 		finally:
-			return self
+			return obj
 
 	# Failed to made contact
-	def error(self, failure):
+	@staticmethod
+	def error(failure, *args, **kwargs):
 		try:
-			logger.info('Failed %s => %s' % (self.url.strip(), failure.getErrorMessage()))
-			self.failure = failure
-			self.onError(failure)
+			obj = kwargs.get('obj')
+			logger.info('Failed %s => %s' % (obj.url, failure.getErrorMessage()))
+			obj.failure = failure
+			obj.onError(failure)
 		except Exception as e:
 			try:
 				logger.error(repr(e))
 			except Exception:
 				logger.error('Unloggable error.')
 		finally:
-			return self
+			return obj
 
 class BaseFetcher(object):
 	def __init__(self, poolSize, urls=None):
@@ -174,8 +183,6 @@ class BaseFetcher(object):
 	# of the logic about how to deploy requests and bind the callbacks.
 	def serveNext(self):
 		with self.lock:
-			if len(self) == 0:
-				self.stop()
 			logger.debug('Fetching more things!')
 			while (self.numFlight < self.poolSize) and len(self):
 				r = self.pop()
@@ -184,6 +191,6 @@ class BaseFetcher(object):
 				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
 				d = client.getPage(r.url, agent='SEOmoz Twisted Cralwer', timeout=r.timeout, followRedirect=1, redirectLimit=r.redirectLimit)
-				d.addCallback(r.success).addCallback(self.success)
-				d.addErrback(r.error).addErrback(self.error)
-				d.addBoth(r.done).addBoth(self.done)
+				d.addCallback(BaseRequest.success, None, **{'obj':r}).addCallback(self.success)
+				d.addErrback(BaseRequest.error, None, **{'obj':r}).addErrback(self.error)
+				d.addBoth(BaseRequest.done, None, **{'obj':r}).addBoth(self.done)
