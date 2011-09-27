@@ -32,7 +32,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 # File handler to downpour.log
-handler = logging.FileHandler('downpour.log')
+handler = logging.FileHandler('/mnt/log/downpour.log')
 handler.setLevel(logging.DEBUG)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
