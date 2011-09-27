@@ -42,6 +42,7 @@ class PoliteFetcher(BaseFetcher):
 	#################
 	def extend(self, request):
 		t = time.time()
+		self.remaining += len(request)
 		for r in request:
 			key = self.getKey(r)
 			try:
@@ -84,6 +85,7 @@ class PoliteFetcher(BaseFetcher):
 	
 	def download(self, req):
 		'''Queue a (url, success, error) tuple request'''
+		self.remaining += 1
 		key = self.getKey(req)
 		try:
 			self.plds[key].append(req)

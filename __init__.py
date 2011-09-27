@@ -14,7 +14,6 @@ except ImportError:
 	except ImportError:
 		print 'Using select reactor'
 
-import objgraph
 import threading	
 from twisted.web import client, error
 from twisted.internet import reactor, ssl
@@ -108,8 +107,11 @@ class BaseFetcher(object):
 		self.poolSize = poolSize
 		self.numFlight = 0
 		self.lock = threading.Lock()
+		self.processed = 0
+		self.remaining = 0
 	
 	def download(self, r):
+		self.remaining += 1
 		self.requests.append(r)
 		self.serveNext()
 	
@@ -143,8 +145,9 @@ class BaseFetcher(object):
 		try:
 			with self.lock:
 				self.numFlight -= 1
-				logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
-				logger.info('objgraph: %s' % repr(objgraph.most_common_types()))
+				self.processed += 1
+				self.remaining -= 1
+				logger.info('Processed : %i | Remaining : %i | In Flight : %i | len : %i' % (self.processed, self.remaining, self.numFlight, len(self)))
 			self.onDone(request)
 		except Exception as e:
 			logger.error(repr(e))
@@ -162,6 +165,7 @@ class BaseFetcher(object):
 			self.onError(failure.value)
 		except Exception as e:
 			logger.error(repr(e))
+		return failure.value
 	
 	# These are how you can start and stop the reactor. It's a convenience
 	# so that you don't have to import reactor when you want to use this
@@ -176,14 +180,13 @@ class BaseFetcher(object):
 	# of the logic about how to deploy requests and bind the callbacks.
 	def serveNext(self):
 		with self.lock:
-			logger.debug('Fetching more things!')
 			while (self.numFlight < self.poolSize) and len(self):
 				r = self.pop()
 				if r == None:
 					break
 				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
-				d = client.getPage(r.url, agent='SEOmoz Twisted Cralwer', timeout=r.timeout, followRedirect=1, redirectLimit=r.redirectLimit)
+				d = client.getPage(r.url, agent='SEOmoz Freshscape/1.0', timeout=r.timeout, followRedirect=1, redirectLimit=r.redirectLimit)
 				d.addCallback(r.success).addCallback(self.success)
 				d.addErrback(r.error).addErrback(self.error)
 				d.addBoth(r.done).addBoth(self.done)
