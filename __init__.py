@@ -38,7 +38,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 class BaseRequest(object):
-	timeout = 30
+	timeout = 90
 	redirectLimit = 10
 	
 	def __init__(self, url):
