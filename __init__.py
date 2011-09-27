@@ -24,7 +24,7 @@ from twisted.internet import reactor, ssl
 import logging
 logger = logging.getLogger('downpour')
 # Stream handler
-formatter = logging.Formatter('[%(asctime)s] %(levelname)s in %(module)s:%(funcName)s => %(message)s')
+formatter = logging.Formatter('[%(asctime)s] %(levelname)s in %(module)s:%(funcName)s@%(lineno)s => %(message)s')
 handler = logging.StreamHandler()
 handler.setLevel(logging.DEBUG)
 handler.setFormatter(formatter)
@@ -64,48 +64,48 @@ class BaseRequest(object):
 	@staticmethod
 	def done(response, *args, **kwargs):
 		try:
-			obj = kwargs.get('obj')
-			obj.response = response
-			obj.onDone(response)
+			request = kwargs.get('request')
+			request.response = response
+			request.onDone(response)
 		except Exception as e:
 			try:
 				logger.error(repr(e))
 			except Exception:
 				logger.error('Unloggable error.')
 		finally:
-			return obj
+			return None
 
 	# Made contact
 	@staticmethod
 	def success(response, *args, **kwargs):
 		try:
-			obj = kwargs.get('obj')
-			logger.info('Successfully fetched %s' % obj.url)
-			obj.response = response
-			obj.onSuccess(response)
+			request = kwargs.get('request')
+			logger.info('Successfully fetched %s' % request.url)
+			request.response = response
+			request.onSuccess(response)
 		except Exception as e:
 			try:
 				logger.error(repr(e))
 			except Exception:
 				logger.error('Unloggable error.')
 		finally:
-			return obj
+			return None
 
 	# Failed to made contact
 	@staticmethod
 	def error(failure, *args, **kwargs):
 		try:
-			obj = kwargs.get('obj')
-			logger.info('Failed %s => %s' % (obj.url, failure.getErrorMessage()))
-			obj.failure = failure
-			obj.onError(failure)
+			request = kwargs.get('request')
+			logger.info('Failed %s => %s' % (request.url, failure.getErrorMessage()))
+			request.failure = failure
+			request.onError(failure)
 		except Exception as e:
 			try:
 				logger.error(repr(e))
 			except Exception:
 				logger.error('Unloggable error.')
 		finally:
-			return obj
+			return None
 
 class BaseFetcher(object):
 	def __init__(self, poolSize, urls=None):
@@ -145,30 +145,28 @@ class BaseFetcher(object):
 		pass
 	
 	# These are internal callbacks
-	def done(self, response):
+	def done(self, response, **kwargs):
 		try:
 			with self.lock:
 				self.numFlight -= 1
 				logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
-			self.onDone(response)
+			self.onDone(kwargs.get('request'))
 		except Exception as e:
 			logger.error(repr(e))
 		finally:
 			self.serveNext()
 	
-	def success(self, response):
+	def success(self, response, **kwargs):
 		try:
-			self.onSuccess(response)
+			self.onSuccess(kwargs.get('request'))
 		except Exception as e:
 			logger.error(repr(e))
-		return response
 	
-	def error(self, response):
+	def error(self, response, **kwargs):
 		try:
-			self.onError(response)
+			self.onError(kwargs.get('request'))
 		except Exception as e:
 			logger.error(repr(e))
-		return response
 	
 	# These are how you can start and stop the reactor. It's a convenience
 	# so that you don't have to import reactor when you want to use this
@@ -191,6 +189,6 @@ class BaseFetcher(object):
 				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
 				d = client.getPage(r.url, agent='SEOmoz Twisted Cralwer', timeout=r.timeout, followRedirect=1, redirectLimit=r.redirectLimit)
-				d.addCallback(BaseRequest.success, None, **{'obj':r}).addCallback(self.success)
-				d.addErrback(BaseRequest.error, None, **{'obj':r}).addErrback(self.error)
-				d.addBoth(BaseRequest.done, None, **{'obj':r}).addBoth(self.done)
+				d.addCallback(BaseRequest.success, request=r).addCallback(self.success, request=r)
+				d.addErrback(BaseRequest.error, request=r).addErrback(self.error, request=r)
+				d.addBoth(BaseRequest.done, request=r).addBoth(self.done, request=r)
