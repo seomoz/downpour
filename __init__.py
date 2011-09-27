@@ -14,9 +14,11 @@ except ImportError:
 	except ImportError:
 		print 'Using select reactor'
 
+import objgraph
 import threading	
 from twisted.web import client, error
 from twisted.internet import reactor, ssl
+from twisted.python.failure import Failure
 
 # Logging
 # We'll have a stream handler and file handler enabled by default, and 
@@ -44,6 +46,7 @@ class BaseRequest(object):
 		self.url = url
 		self.response = None
 		self.failure  = None
+		logger.debug('Building request for %s' % self.url)
 	
 	def __del__(self):
 		logger.debug('Deleting request for %s' % self.url)
@@ -61,10 +64,8 @@ class BaseRequest(object):
 		pass
 	
 	# Finished
-	@staticmethod
-	def done(response, *args, **kwargs):
+	def done(request, response):
 		try:
-			request = kwargs.get('request')
 			request.response = response
 			request.onDone(response)
 		except Exception as e:
@@ -72,14 +73,11 @@ class BaseRequest(object):
 				logger.error(repr(e))
 			except Exception:
 				logger.error('Unloggable error.')
-		finally:
-			return None
+		return request
 
 	# Made contact
-	@staticmethod
-	def success(response, *args, **kwargs):
+	def success(request, response):
 		try:
-			request = kwargs.get('request')
 			logger.info('Successfully fetched %s' % request.url)
 			request.response = response
 			request.onSuccess(response)
@@ -88,14 +86,11 @@ class BaseRequest(object):
 				logger.error(repr(e))
 			except Exception:
 				logger.error('Unloggable error.')
-		finally:
-			return None
+		return request
 
 	# Failed to made contact
-	@staticmethod
-	def error(failure, *args, **kwargs):
+	def error(request, failure):
 		try:
-			request = kwargs.get('request')
 			logger.info('Failed %s => %s' % (request.url, failure.getErrorMessage()))
 			request.failure = failure
 			request.onError(failure)
@@ -104,8 +99,7 @@ class BaseRequest(object):
 				logger.error(repr(e))
 			except Exception:
 				logger.error('Unloggable error.')
-		finally:
-			return None
+		return Failure(request)
 
 class BaseFetcher(object):
 	def __init__(self, poolSize, urls=None):
@@ -135,36 +129,37 @@ class BaseFetcher(object):
 	# These can be overridden to do various post-processing. For example, 
 	# you might want to add more requests, etc.
 	
-	def onDone(self, response):
+	def onDone(self, request):
 		pass
 	
-	def onSuccess(self, response):
+	def onSuccess(self, request):
 		pass
 	
-	def onError(self, response):
+	def onError(self, request):
 		pass
 	
 	# These are internal callbacks
-	def done(self, response, **kwargs):
+	def done(self, request):
 		try:
 			with self.lock:
 				self.numFlight -= 1
 				logger.debug('numFlight : %i | len : %i' % (self.numFlight, len(self)))
-			self.onDone(kwargs.get('request'))
+				logger.info('objgraph: %s' % repr(objgraph.most_common_types()))
+			self.onDone(request)
 		except Exception as e:
 			logger.error(repr(e))
 		finally:
 			self.serveNext()
 	
-	def success(self, response, **kwargs):
+	def success(self, request):
 		try:
-			self.onSuccess(kwargs.get('request'))
+			self.onSuccess(request)
 		except Exception as e:
 			logger.error(repr(e))
 	
-	def error(self, response, **kwargs):
+	def error(self, failure):
 		try:
-			self.onError(kwargs.get('request'))
+			self.onError(failure.value)
 		except Exception as e:
 			logger.error(repr(e))
 	
@@ -189,6 +184,6 @@ class BaseFetcher(object):
 				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
 				d = client.getPage(r.url, agent='SEOmoz Twisted Cralwer', timeout=r.timeout, followRedirect=1, redirectLimit=r.redirectLimit)
-				d.addCallback(BaseRequest.success, request=r).addCallback(self.success, request=r)
-				d.addErrback(BaseRequest.error, request=r).addErrback(self.error, request=r)
-				d.addBoth(BaseRequest.done, request=r).addBoth(self.done, request=r)
+				d.addCallback(r.success).addCallback(self.success)
+				d.addErrback(r.error).addErrback(self.error)
+				d.addBoth(r.done).addBoth(self.done)
