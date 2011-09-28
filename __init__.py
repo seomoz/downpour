@@ -165,7 +165,6 @@ class BaseFetcher(object):
 			self.onError(failure.value)
 		except Exception as e:
 			logger.error(repr(e))
-		return failure.value
 	
 	# These are how you can start and stop the reactor. It's a convenience
 	# so that you don't have to import reactor when you want to use this
