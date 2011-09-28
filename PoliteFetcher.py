@@ -91,7 +91,7 @@ class PoliteFetcher(BaseFetcher):
 			self.plds[key].append(req)
 		except KeyError:
 			self.plds[key] = deque([req])
-			self.requests.append((time.time()), key)
+			self.requests.append((time.time(), key))
 	
 if __name__ == '__main__':
 	from downpour import BaseRequest
