@@ -63,7 +63,7 @@ class PoliteFetcher(BaseFetcher):
 		
 	def pop(self):
 		'''Get the next request'''
-		if len(self.requests) < self.poolSize:
+		if len(self.pldQueue) < self.poolSize:
 			self.extend(10000)
 		now = time.time()
 		while True:
