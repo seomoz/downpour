@@ -14,12 +14,12 @@ class PoliteFetcher(BaseFetcher):
 	# Infinity, because there's not another easy way to access it?
 	infinity = float('Inf')
 	
-	def __init__(self, poolSize=10):
+	def __init__(self, poolSize=10, **kwargs):
 		# Call the parent constructor
 		BaseFetcher.__init__(self, poolSize)
 		self.plds = dict((q.key, q) for q in qr.Queue.all('domain:*'))
 		self.pldQueue = qr.Queue('plds')
-		self.requests = qr.Queue('requests')
+		self.requests = qr.Queue('request', **kwargs)
 		self.timer = None
 	
 	def __len__(self):
