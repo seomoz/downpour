@@ -42,7 +42,23 @@ class PoliteFetcher(BaseFetcher):
 	#################
 	# Insertion to our queue
 	#################
-	def extend(self, upto):
+	def extend(self, requests):
+		count = 0
+		t = time.time()
+		for r in requests:
+			count += 1
+			key = self.getKey(r)
+			try:
+				self.plds[key].push(r)
+			except KeyError:
+				logger.debug('Making queue for %s' % r.url)
+				q = qr.Queue(key)
+				q.push(r)
+				self.plds[key] = q
+				self.pldQueue.push((t, key))
+		self.remaining += count
+	
+	def grow(self, upto=10000):
 		count = 0
 		t = time.time()
 		r = self.requests.pop()
@@ -55,19 +71,16 @@ class PoliteFetcher(BaseFetcher):
 			except KeyError:
 				logger.debug('Making queue for %s' % key)
 				q = qr.Queue(key)
-				logger.debug('Pushing request')
 				q.push(r)
 				self.plds[key] = q
-				logger.debug('Pushing time,key pair')
 				self.pldQueue.push((t, key))
-				logger.debug('Made queue for %s' % key)
 			r = self.requests.pop()
 		self.remaining += count
 		
 	def pop(self):
 		'''Get the next request'''
 		if len(self.pldQueue) < self.poolSize:
-			self.extend(10000)
+			self.grow()
 		now = time.time()
 		while True:
 			# Get the next plds we might want to fetch from
