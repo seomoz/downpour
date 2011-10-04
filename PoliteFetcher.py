@@ -42,22 +42,25 @@ class PoliteFetcher(BaseFetcher):
 	#################
 	# Insertion to our queue
 	#################
-	def extend(self, max):
+	def extend(self, upto):
 		count = 0
 		t = time.time()
 		r = self.requests.pop()
-		while r and count < max:
+		while r and count < upto:
 			count += 1
 			key = self.getKey(r)
 			try:
 				logger.debug('Read request %s' % r.url)
 				self.plds[key].push(r)
 			except KeyError:
-				logger.debug('Made queue for %s' % key)
+				logger.debug('Making queue for %s' % key)
 				q = qr.Queue(key)
+				logger.debug('Pushing request')
 				q.push(r)
 				self.plds[key] = q
+				logger.debug('Pushing time,key pair')
 				self.pldQueue.push((t, key))
+				logger.debug('Made queue for %s' % key)
 			r = self.requests.pop()
 		self.remaining += count
 		
