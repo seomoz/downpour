@@ -68,10 +68,7 @@ class BaseRequest(object):
 			request.response = response
 			request.onDone(response)
 		except Exception as e:
-			try:
-				logger.error(repr(e))
-			except Exception:
-				logger.error('Unloggable error.')
+			logger.exception('Request done handler failed')
 		return request
 
 	# Made contact
@@ -81,10 +78,7 @@ class BaseRequest(object):
 			request.response = response
 			request.onSuccess(response)
 		except Exception as e:
-			try:
-				logger.error(repr(e))
-			except Exception:
-				logger.error('Unloggable error.')
+			logger.exception('Request success handler failed')
 		return request
 
 	# Failed to made contact
@@ -94,10 +88,7 @@ class BaseRequest(object):
 			request.failure = failure
 			request.onError(failure)
 		except Exception as e:
-			try:
-				logger.error(repr(e))
-			except Exception:
-				logger.error('Unloggable error.')
+			logger.exception('Request error handler failed')
 		return Failure(request)
 
 class BaseFetcher(object):
@@ -150,7 +141,7 @@ class BaseFetcher(object):
 				logger.info('Processed : %i | Remaining : %i | In Flight : %i | len : %i' % (self.processed, self.remaining, self.numFlight, len(self)))
 			self.onDone(request)
 		except Exception as e:
-			logger.error(repr(e))
+			logger.exception('BaseFetcher:onDone failed.')
 		finally:
 			self.serveNext()
 	
@@ -158,13 +149,13 @@ class BaseFetcher(object):
 		try:
 			self.onSuccess(request)
 		except Exception as e:
-			logger.error(repr(e))
+			logger.exception('BaseFetcher:onSuccess failed.')
 	
 	def error(self, failure):
 		try:
 			self.onError(failure.value)
 		except Exception as e:
-			logger.error(repr(e))
+			logger.exception('BaseFetcher:onError failed.')
 	
 	# These are how you can start and stop the reactor. It's a convenience
 	# so that you don't have to import reactor when you want to use this
