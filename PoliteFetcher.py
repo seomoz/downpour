@@ -103,6 +103,10 @@ class PoliteFetcher(BaseFetcher):
 					# This should never happen
 					logger.error('Tried to pop from non-existent pld: %s' % next[1])
 					return None
+				except KeyError:
+					# This can happen between restarts
+					self.plds[next[1]] = qr.Queue(next[1])
+					return self.plds[next[1]].pop()
 		return None
 		
 if __name__ == '__main__':
