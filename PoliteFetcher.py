@@ -17,7 +17,6 @@ class PoliteFetcher(BaseFetcher):
 	def __init__(self, poolSize=10, **kwargs):
 		# Call the parent constructor
 		BaseFetcher.__init__(self, poolSize)
-		self.plds = dict((q.key, q) for q in qr.Queue.all('domain:*'))
 		self.pldQueue = qr.Queue('plds')
 		self.requests = qr.Queue('request', **kwargs)
 		self.timer = None
@@ -33,11 +32,8 @@ class PoliteFetcher(BaseFetcher):
 	# Event callbacks
 	def onDone(self, request):
 		key = self.getKey(request)
-		if len(self.plds[key]):
-			delay = time.time() + self.wait
-			self.pldQueue.push((delay, key))
-		else:
-			del self.plds[key]
+		delay = time.time() + self.wait
+		self.pldQueue.push((delay, key))
 	
 	#################
 	# Insertion to our queue
@@ -48,14 +44,8 @@ class PoliteFetcher(BaseFetcher):
 		for r in requests:
 			count += 1
 			key = self.getKey(r)
-			try:
-				self.plds[key].push(r)
-			except KeyError:
-				logger.debug('Making queue for %s' % r.url)
-				q = qr.Queue(key)
-				q.push(r)
-				self.plds[key] = q
-				self.pldQueue.push((t, key))
+			qr.Queue(key).push(r)
+			self.pldQueue.push((t, key))
 		self.remaining += count
 	
 	def grow(self, upto=10000):
@@ -65,15 +55,8 @@ class PoliteFetcher(BaseFetcher):
 		while r and count < upto:
 			count += 1
 			key = self.getKey(r)
-			try:
-				logger.debug('Read request %s' % r.url)
-				self.plds[key].push(r)
-			except KeyError:
-				logger.debug('Making queue for %s' % key)
-				q = qr.Queue(key)
-				q.push(r)
-				self.plds[key] = q
-				self.pldQueue.push((t, key))
+			qr.Queue(key).push(r)
+			self.pldQueue.push((t, key))
 			r = self.requests.pop()
 		self.remaining += count
 		
@@ -98,15 +81,14 @@ class PoliteFetcher(BaseFetcher):
 				# Unset the timer
 				self.timer = None
 				try:
-					return self.plds[next[1]].pop()
+					v = qr.Queue(next[1]).pop()
+					if not v:
+						continue
+					return v
 				except ValueError:
 					# This should never happen
 					logger.error('Tried to pop from non-existent pld: %s' % next[1])
 					return None
-				except KeyError:
-					# This can happen between restarts
-					self.plds[next[1]] = qr.Queue(next[1])
-					return self.plds[next[1]].pop()
 		return None
 		
 if __name__ == '__main__':
