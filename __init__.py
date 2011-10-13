@@ -43,8 +43,6 @@ class BaseRequest(object):
 	
 	def __init__(self, url):
 		self.url = url
-		self.response = None
-		self.failure  = None
 		logger.debug('Building request for %s' % self.url)
 	
 	def __del__(self):
@@ -65,7 +63,6 @@ class BaseRequest(object):
 	# Finished
 	def done(request, response):
 		try:
-			request.response = response
 			request.onDone(response)
 		except Exception as e:
 			logger.exception('Request done handler failed')
@@ -75,7 +72,6 @@ class BaseRequest(object):
 	def success(request, response):
 		try:
 			logger.info('Successfully fetched %s' % request.url)
-			request.response = response
 			request.onSuccess(response)
 		except Exception as e:
 			logger.exception('Request success handler failed')
