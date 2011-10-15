@@ -88,7 +88,7 @@ class BaseRequest(object):
 		return Failure(request)
 
 class BaseFetcher(object):
-	def __init__(self, poolSize, urls=None):
+	def __init__(self, poolSize=10, urls=None):
 		self.sslContext = ssl.ClientContextFactory()
 		self.requests = [] if urls == None else urls
 		self.poolSize = poolSize
@@ -114,6 +114,11 @@ class BaseFetcher(object):
 			return self.requests.pop()
 		except IndexError:
 			return None
+	
+	# This is how to fetch another request
+	def push(self, request):
+		self.requests.append(request)
+		self.serveNext()
 	
 	# These can be overridden to do various post-processing. For example, 
 	# you might want to add more requests, etc.
