@@ -80,8 +80,10 @@ class BaseRequest(object):
 	# Failed to made contact
 	def error(request, failure):
 		try:
-			logger.info('Failed %s => %s' % (request.url, failure.getErrorMessage()))
-			request.failure = failure
+			try:
+				failure.raiseException()
+			except:
+				logger.exception('Failed for %s' % self.url)
 			request.onError(failure)
 		except Exception as e:
 			logger.exception('Request error handler failed')
