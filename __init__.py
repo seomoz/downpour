@@ -179,7 +179,11 @@ class BaseFetcher(object):
 					break
 				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
-				d = client.getPage(r.url, agent='SEOmoz Freshscape/1.0', timeout=r.timeout, followRedirect=1, redirectLimit=r.redirectLimit)
-				d.addCallback(r.success).addCallback(self.success)
-				d.addErrback(r.error).addErrback(self.error)
-				d.addBoth(r.done).addBoth(self.done)
+				try:
+					d = client.getPage(r.url, agent='SEOmoz Freshscape/1.0', timeout=r.timeout, followRedirect=1, redirectLimit=r.redirectLimit)
+					d.addCallback(r.success).addCallback(self.success)
+					d.addErrback(r.error).addErrback(self.error)
+					d.addBoth(r.done).addBoth(self.done)
+				except:
+					self.numFlight -= 1
+					logger.exception('Unable to request %s' % r.url)
