@@ -37,13 +37,38 @@ handler.setLevel(logging.DEBUG)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+class RequestServicer(client.HTTPClientFactory):
+	def __init__(self, request):
+		self.request = request
+		client.HTTPClientFactory.__init__(self, url=request.url, agent='SEOmoz Freshscape/1.0', timeout=request.timeout, redirectLimit=request.redirectLimit)
+	
+	def setURL(self, url):
+		try:
+			self.request.onURL(url)
+		except:
+			logger.exception('%s onURL failed' % self.request.url)
+		client.HTTPClientFactory.setURL(self, url)
+	
+	def gotHeaders(self, headers):
+		try:
+			self.request.onHeaders(headers)
+		except:
+			logger.exception('%s onHeaders failed' % self.request.url)
+		client.HTTPClientFactory.gotHeaders(self, headers)
+	
+	def gotStatus(self, version, status, message):
+		try:
+			self.request.onStatus(version, status, message)
+		except:
+			logger.exception('%s onStatus failed' % self.request.url)
+		client.HTTPClientFactory.gotStatus(self, version, status, message)
+
 class BaseRequest(object):
 	timeout = 45
 	redirectLimit = 10
 	
 	def __init__(self, url):
 		self.url = url
-		logger.debug('Building request for %s' % self.url)
 	
 	def __del__(self):
 		logger.debug('Deleting request for %s' % self.url)
@@ -58,6 +83,19 @@ class BaseRequest(object):
 		pass
 	
 	def onDone(self, response):
+		pass
+	
+	def onHeaders(self, headers):
+		pass
+	
+	def onStatus(self, version, status, message):
+		if status != '200':
+			logger.error('%s Got status => (%s, %s, %s)' % (self.url, version, status, message))
+		pass
+	
+	def onURL(self, url):
+		if self.url != url:
+			logger.error('%s set => %s' % (self.url, url))
 		pass
 	
 	# Finished
@@ -180,10 +218,19 @@ class BaseFetcher(object):
 				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
 				try:
-					d = client.getPage(r.url, agent='SEOmoz Freshscape/1.0', timeout=r.timeout, followRedirect=1, redirectLimit=r.redirectLimit)
-					d.addCallback(r.success).addCallback(self.success)
-					d.addErrback(r.error).addErrback(self.error)
-					d.addBoth(r.done).addBoth(self.done)
+					# This is the expansion of the short version getPage
+					# and is taken from twisted's source
+					scheme, host, port, path = client._parse(r.url)
+					factory = RequestServicer(r)
+					if scheme == 'https':
+						from twisted.internet import ssl
+						contextFactory = ssl.ClientContextFactory()
+						reactor.connectSSL(host, port, factory, contextFactory)
+					else:
+						reactor.connectTCP(host, port, factory)
+					factory.deferred.addCallback(r.success).addCallback(self.success)
+					factory.deferred.addErrback(r.error).addErrback(self.error)
+					factory.deferred.addBoth(r.done).addBoth(self.done)
 				except:
 					self.numFlight -= 1
 					logger.exception('Unable to request %s' % r.url)
