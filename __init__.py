@@ -83,7 +83,7 @@ class BaseRequest(object):
 			try:
 				failure.raiseException()
 			except:
-				logger.exception('Failed for %s' % self.url)
+				logger.exception('Failed for %s' % request.url)
 			request.onError(failure)
 		except Exception as e:
 			logger.exception('Request error handler failed')
