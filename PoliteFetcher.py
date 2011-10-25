@@ -9,7 +9,7 @@ import time						# For to implement politeness
 import urlparse					# To efficiently parse URLs
 
 class PoliteFetcher(BaseFetcher):
-	# How long should we wait before making a request to the same tld?
+	# The /default/ time we should wait before hitting the same domain
 	wait     = 2.0
 	# Infinity, because there's not another easy way to access it?
 	infinity = float('Inf')
@@ -44,8 +44,10 @@ class PoliteFetcher(BaseFetcher):
 		for r in requests:
 			count += 1
 			key = self.getKey(r)
-			qr.Queue(key).push(r)
-			self.pldQueue.push((t, key))
+			q = qr.Queue(key)
+			if not len(q):
+				self.pldQueue.push((t, key))
+			q.push(r)
 		self.remaining += count
 	
 	def grow(self, upto=10000):
@@ -55,8 +57,10 @@ class PoliteFetcher(BaseFetcher):
 		while r and count < upto:
 			count += 1
 			key = self.getKey(r)
-			qr.Queue(key).push(r)
-			self.pldQueue.push((t, key))
+			q = qr.Queue(key)
+			if not len(q):
+				self.pldQueue.push((t, key))
+			q.push(r)
 			r = self.requests.pop()
 		self.remaining += count
 		
@@ -68,6 +72,8 @@ class PoliteFetcher(BaseFetcher):
 		while True:
 			# Get the next plds we might want to fetch from
 			next = self.pldQueue.peek()
+			if not next:
+				return None
 			# If the next-fetchable is not soon enough, then wait
 			if next[0] > now:
 				# If we weren't waiting, then wait
