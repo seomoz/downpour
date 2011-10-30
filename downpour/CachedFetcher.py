@@ -44,35 +44,41 @@ def service(request, base):
 	while url:
 		path = os.path.join(base, makePath(url))
 		with getFile(path) as f:
+			logger.debug('\tReading %s' % path)
 			obj = pickle.load(f)
 			# Invoke the status callback
 			status = obj.get('status', None)
 			if status:
+				logger.debug('\tonStatus(%s)' % ', '.join(status))
 				# This is a tuple, so we need to expand it
 				request.onStatus(*status)
 			# Now invoke the headers callback
 			headers = obj.get('headers', None)
 			if headers:
+				logger.debug('\tonHeaders(%s)' % repr(headers))
 				request.onHeaders(headers)
 			# Now, we'll either invoke the onURL, or the onDone, etc. callbacks
 			url = obj.get('url', None)
 			if url:
+				logger.debug('\tForwarded to %s' % url)
 				# Just move on to the next followed url
 				continue
 			# The success callback
 			success = obj.get('success', None)
 			if success:
+				logger.debug('\tonSuccess')
 				request.onSuccess(success)
 				request.onDone(request)
 			# The failure callback
-			failure = obj.get('failure', None)
+			failure = obj.get('error', None)
 			if failure:
-				request.onFailure(failure)
+				logger.debug('\tonError')
+				request.onError(failure)
 				request.onDone(Failure(request))		
 
 # Do we have a cached copy?
-def exists(request):
-	return os.path.exists(makePath(request.url))
+def exists(request, base):
+	return os.path.exists(os.path.join(base, makePath(request.url)))
 
 class CachedRequest(BaseRequest):
 	def __init__(self, url, base, request):
@@ -101,7 +107,7 @@ class CachedRequest(BaseRequest):
 			pickle.dump({
 				'status': self.status,
 				'headers': self.headers,
-				'failure': failure
+				'error': failure
 			}, f)
 		self.request.onError(failure)
 	
@@ -127,13 +133,13 @@ class CachedRequest(BaseRequest):
 			}, f)
 
 class CachedFetcher(BaseFetcher):
-	def __init__(self, fetcher, directory='./'):
+	def __init__(self, fetcher, base='./'):
 		# Only service one request at a time. It's ok, though -- we're not going to
 		# be relying on this too heavily.
 		BaseFetcher.__init__(self, 1)
 		self.fetcher = fetcher
 		# It's important to get the absolute path
-		self.directory = os.path.abspath(directory)
+		self.base = os.path.abspath(base)
 	
 	# For completeness of the interface
 	def __len__(self):
@@ -141,11 +147,12 @@ class CachedFetcher(BaseFetcher):
 		
 	# Pass the buck
 	def push(self, request):
-		if not exists(request):
-			self.fetcher.push(CachedRequest(request.url, self.directory, request))
+		if not exists(request, self.base):
+			logger.debug('%s is not cached.' % request.url)
+			self.fetcher.push(CachedRequest(request.url, self.base, request))
 		else:
-			service(request, self.directory)
-		self.fetcher.push(request)
+			logger.debug('%s is cached.' % request.url)
+			service(request, self.base)
 
 	# Pass the buck
 	def extend(self, requests):
@@ -153,12 +160,12 @@ class CachedFetcher(BaseFetcher):
 		# http://stackoverflow.com/q/949098/173556
 		from itertools import tee
 		# Make two generators for exists/request pairs
-		g1, g2 = tee((exists(request), request) for request in requests)
+		g1, g2 = tee((exists(request, self.base), request) for request in requests)
 		# Extend for those that haven't been cached
-		self.fetcher.extend(CachedRequest(request.url, self.directory, request) for exists, request in g1 if not exists)
+		self.fetcher.extend(CachedRequest(request.url, self.base, request) for exists, request in g1 if not exists)
 		for exists, request in g2:
 			if exists:
-				service(request, self.directory)
+				service(request, self.base)
 	
 	def serveNext(self):
 		# Just in case this gets called by accident
@@ -178,6 +185,6 @@ if __name__ == '__main__':
 	
 	with file('urls.txt') as f:
 		for line in f:
-			cf.push(BaseRequest(line))
+			cf.push(BaseRequest(line.strip()))
 	
 	cf.start()
