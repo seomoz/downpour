@@ -160,6 +160,11 @@ class BaseFetcher(object):
 		self.requests.append(request)
 		self.serveNext()
 	
+	# This is how to fetch several more requests
+	def extend(self, requests):
+		self.requests.extend(requests)
+		self.serveNext()
+	
 	# These can be overridden to do various post-processing. For example, 
 	# you might want to add more requests, etc.
 	
@@ -234,3 +239,6 @@ class BaseFetcher(object):
 				except:
 					self.numFlight -= 1
 					logger.exception('Unable to request %s' % r.url)
+
+# Now do a few imports for convenience
+from PoliteFetcher import PoliteFetcher
