@@ -21,7 +21,7 @@ def makePath(url):
 	# And now the domain
 	path = os.path.join(path, *parsed.hostname.split('.'))
 	# And port if it exists, or the default port
-	path = os.path.join(path, parsed.port or '80')
+	path = os.path.join(path, str(parsed.port) or '80')
 	# We need to strip off the first '/'
 	path = os.path.join(path, *[p for p in parsed.path.split('/') if p])
 	path = os.path.join(path, base64.b64encode(url))
