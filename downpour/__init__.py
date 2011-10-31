@@ -38,9 +38,9 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 class RequestServicer(client.HTTPClientFactory):
-	def __init__(self, request):
+	def __init__(self, request, agent):
 		self.request = request
-		client.HTTPClientFactory.__init__(self, url=request.url, agent='SEOmoz Freshscape/1.0', timeout=request.timeout, redirectLimit=request.redirectLimit)
+		client.HTTPClientFactory.__init__(self, url=request.url, agent=agent, timeout=request.timeout, redirectLimit=request.redirectLimit)
 	
 	def setURL(self, url):
 		try:
@@ -128,7 +128,7 @@ class BaseRequest(object):
 		return Failure(request)
 
 class BaseFetcher(object):
-	def __init__(self, poolSize=10, urls=None):
+	def __init__(self, poolSize=10, urls=None, agent=None):
 		self.sslContext = ssl.ClientContextFactory()
 		self.requests = [] if urls == None else urls
 		self.poolSize = poolSize
@@ -136,6 +136,7 @@ class BaseFetcher(object):
 		self.lock = threading.Lock()
 		self.processed = 0
 		self.remaining = 0
+		self.agent = agent or 'rogerbot/1.0'
 	
 	def download(self, r):
 		self.remaining += 1
@@ -226,7 +227,7 @@ class BaseFetcher(object):
 					# This is the expansion of the short version getPage
 					# and is taken from twisted's source
 					scheme, host, port, path = client._parse(r.url)
-					factory = RequestServicer(r)
+					factory = RequestServicer(r, self.agent)
 					if scheme == 'https':
 						from twisted.internet import ssl
 						contextFactory = ssl.ClientContextFactory()

@@ -10,6 +10,7 @@ from downpour import logger
 from downpour import reactor
 from downpour import BaseFetcher
 from downpour import BaseRequest
+from twisted.internet import defer
 from twisted.python.failure import Failure
 
 # Make a filesystem path for this url
@@ -23,11 +24,10 @@ def makePath(url):
 	path = os.path.join(path, parsed.port or '80')
 	# We need to strip off the first '/'
 	path = os.path.join(path, *[p for p in parsed.path.split('/') if p])
-	if parsed.query:
-		path = os.path.join(path, base64.b64encode(parsed.query))
+	path = os.path.join(path, base64.b64encode(url))
 	return path
 
-def getFile(path, mode='r'):
+def getPath(path):
 	# Ensure that there's a directory
 	d, f = os.path.split(path)
 	try:
@@ -35,7 +35,7 @@ def getFile(path, mode='r'):
 	except OSError:
 		# Ignore if the directory exists
 		pass
-	return file(path, mode)
+	return path
 
 # Service this particular request
 def service(request, base):
@@ -43,38 +43,40 @@ def service(request, base):
 	url = request.url
 	while url:
 		path = os.path.join(base, makePath(url))
-		with getFile(path) as f:
+		with file(getPath(path), 'r') as f:
 			logger.debug('\tReading %s' % path)
 			obj = pickle.load(f)
-			# Invoke the status callback
-			status = obj.get('status', None)
-			if status:
-				logger.debug('\tonStatus(%s)' % ', '.join(status))
-				# This is a tuple, so we need to expand it
-				request.onStatus(*status)
-			# Now invoke the headers callback
-			headers = obj.get('headers', None)
-			if headers:
-				logger.debug('\tonHeaders(%s)' % repr(headers))
-				request.onHeaders(headers)
-			# Now, we'll either invoke the onURL, or the onDone, etc. callbacks
-			url = obj.get('url', None)
-			if url:
-				logger.debug('\tForwarded to %s' % url)
-				# Just move on to the next followed url
-				continue
-			# The success callback
-			success = obj.get('success', None)
-			if success:
-				logger.debug('\tonSuccess')
-				request.onSuccess(success)
-				request.onDone(request)
-			# The failure callback
-			failure = obj.get('error', None)
-			if failure:
-				logger.debug('\tonError')
-				request.onError(failure)
-				request.onDone(Failure(request))		
+		# Invoke the status callback
+		status = obj.get('status', None)
+		if status:
+			logger.debug('\tonStatus(%s)' % ', '.join(status))
+			# This is a tuple, so we need to expand it
+			request.onStatus(*status)
+		# Now invoke the headers callback
+		headers = obj.get('headers', None)
+		if headers:
+			logger.debug('\tonHeaders(%s)' % repr(headers))
+			request.onHeaders(headers)
+		# Now, we'll either invoke the onURL, or the onDone, etc. callbacks
+		url = obj.get('url', None)
+		if url:
+			logger.debug('\tForwarded to %s' % url)
+			# Just move on to the next followed url
+			continue
+		# The success callback
+		success = obj.get('success', None)
+		if success:
+			logger.debug('\tonSuccess')
+			d = defer.Deferred()
+			d.addCallback(request.onSuccess).addBoth(request.onDone)
+			reactor.callLater(0, d.callback, success)
+		# The failure callback
+		failure = obj.get('error', None)
+		if failure:
+			logger.debug('\tonError')
+			d = defer.Deferred()
+			d.addCallback(request.onError).addBoth(request.onDone)
+			reactor.callLater(0, d.callback, failure)
 
 # Do we have a cached copy?
 def exists(request, base):
@@ -93,7 +95,7 @@ class CachedRequest(BaseRequest):
 	# to do with the input!
 	def onSuccess(self, text):
 		path = os.path.join(self.base, makePath(self.url))
-		with getFile(path, 'w+') as f:
+		with file(getPath(path), 'w+') as f:
 			pickle.dump({
 				'status': self.status,
 				'headers': self.headers,
@@ -103,7 +105,7 @@ class CachedRequest(BaseRequest):
 	
 	def onError(self, failure):
 		path = os.path.join(self.base, makePath(self.url))
-		with getFile(path, 'w+') as f:
+		with file(getPath(path), 'w+') as f:
 			pickle.dump({
 				'status': self.status,
 				'headers': self.headers,
@@ -125,7 +127,7 @@ class CachedRequest(BaseRequest):
 	def onURL(self, url):
 		path = os.path.join(self.base, makePath(self.url))
 		# Now, we should write what information we have out
-		with getFile(path, 'w+') as f:
+		with file(getPath(path), 'w+') as f:
 			pickle.dump({
 				'url': url,
 				'status': self.status,
@@ -140,6 +142,8 @@ class CachedFetcher(BaseFetcher):
 		self.fetcher = fetcher
 		# It's important to get the absolute path
 		self.base = os.path.abspath(base)
+		# A list of requests serviceable by the cache
+		self.serviceable = []
 	
 	# For completeness of the interface
 	def __len__(self):
@@ -152,7 +156,8 @@ class CachedFetcher(BaseFetcher):
 			self.fetcher.push(CachedRequest(request.url, self.base, request))
 		else:
 			logger.debug('%s is cached.' % request.url)
-			service(request, self.base)
+			self.serviceable.append(request)
+		self.serveNext()
 
 	# Pass the buck
 	def extend(self, requests):
@@ -165,11 +170,18 @@ class CachedFetcher(BaseFetcher):
 		self.fetcher.extend(CachedRequest(request.url, self.base, request) for exists, request in g1 if not exists)
 		for exists, request in g2:
 			if exists:
-				service(request, self.base)
+				self.serviceable.append(request)
+		self.serveNext()
 	
 	def serveNext(self):
-		# Just in case this gets called by accident
-		pass
+		while len(self.serviceable):
+			service(self.serviceable.pop(), self.base)
+	
+	def start(self):
+		self.fetcher.start()
+	
+	def stop(self):
+		self.fetcher.stop()
 		
 if __name__ == '__main__':
 	import logging

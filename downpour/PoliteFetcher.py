@@ -6,20 +6,21 @@ from downpour import BaseFetcher, logger, reactor
 
 import qr
 import time						# For to implement politeness
+import reppy
 import urlparse					# To efficiently parse URLs
 
 class PoliteFetcher(BaseFetcher):
-	# The /default/ time we should wait before hitting the same domain
-	wait     = 2.0
-	# Infinity, because there's not another easy way to access it?
-	infinity = float('Inf')
-	
-	def __init__(self, poolSize=10, **kwargs):
+	def __init__(self, poolSize=10, delay=2, allowAll=False, **kwargs):
 		# Call the parent constructor
 		BaseFetcher.__init__(self, poolSize)
 		self.pldQueue = qr.Queue('plds')
 		self.requests = qr.Queue('request', **kwargs)
+		self.delay = delay
 		self.timer = None
+		# This is a way to ignore the allow/disallow directives
+		# For example, if you're checking for allow in other places
+		self.allowAll = allowAll
+		self.userAgentString = reppy.getUserAgentString(self.agent)
 	
 	def __len__(self):
 		return len(self.pldQueue) + len(self.requests)
@@ -29,10 +30,19 @@ class PoliteFetcher(BaseFetcher):
 		# This aliasing is just in case we want to change that scheme later, easily
 		return 'domain:%s' % urlparse.urlparse(req.url.strip()).hostname
 	
+	def allowed(self, url):
+		'''Are we allowed to fetch this url/urls?'''
+		return self.allowAll or reppy.allowed(url, self.agent, self.userAgentString)
+	
+	def crawlDelay(self, url):
+		'''How long to wait before getting the next page from this domain?'''
+		return reppy.crawlDelay(url, self.agent, self.userAgentString) or self.delay
+	
 	# Event callbacks
 	def onDone(self, request):
+		# Use the robots.txt delay, defaulting to our own
 		key = self.getKey(request)
-		delay = time.time() + self.wait
+		delay = time.time() + self.crawlDelay(request.url)
 		self.pldQueue.push((delay, key))
 	
 	#################
@@ -42,27 +52,29 @@ class PoliteFetcher(BaseFetcher):
 		count = 0
 		t = time.time()
 		for r in requests:
-			count += 1
-			key = self.getKey(r)
-			q = qr.Queue(key)
-			if not len(q):
-				self.pldQueue.push((t, key))
-			q.push(r)
-		self.remaining += count
+			count += self.push(r) or 0
+		return count
 	
 	def grow(self, upto=10000):
 		count = 0
 		t = time.time()
 		r = self.requests.pop()
 		while r and count < upto:
-			count += 1
-			key = self.getKey(r)
+			count += self.push(r) or 0
+			r = self.requests.pop()
+		return count
+	
+	def push(self, request):
+		if self.allowed(request.url):
+			key = self.getKey(request)
 			q = qr.Queue(key)
 			if not len(q):
-				self.pldQueue.push((t, key))
-			q.push(r)
-			r = self.requests.pop()
-		self.remaining += count
+				self.pldQueue.push((time.time(), key))
+			q.push(request)
+			self.remaining += 1
+		else:
+			logger.debug('Request %s blocked by robots.txt' % request.url)
+			return 0
 		
 	def pop(self):
 		'''Get the next request'''
