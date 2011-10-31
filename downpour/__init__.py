@@ -15,7 +15,8 @@ except ImportError:
 		print 'Using select reactor'
 
 import re
-import threading	
+import threading
+from twisted.python import log
 from twisted.web import client, error
 from twisted.internet import reactor, ssl
 from twisted.python.failure import Failure
@@ -37,6 +38,10 @@ handler = logging.FileHandler('/mnt/log/downpour.log')
 handler.setLevel(logging.DEBUG)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+# Twisted has an observer for logging twisted's errors
+observer = log.PythonLoggingObserver()
+observer.start()
 
 class RequestServicer(client.HTTPClientFactory):
 	def __init__(self, request, agent):
@@ -239,7 +244,7 @@ class BaseFetcher(object):
 					else:
 						reactor.connectTCP(host, port, factory)
 					factory.deferred.addCallback(r.success).addCallback(self.success)
-					factory.deferred.addErrback(r.error).addErrback(self.error)
+					factory.deferred.addErrback(r.error).addErrback(self.error).addErrback(log.err)
 					factory.deferred.addBoth(r.done).addBoth(self.done)
 				except:
 					self.numFlight -= 1
