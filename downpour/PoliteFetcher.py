@@ -74,6 +74,7 @@ class PoliteFetcher(BaseFetcher):
 				self.pldQueue.push((time.time(), key))
 			q.push(request)
 			self.remaining += 1
+			return 1
 		else:
 			logger.debug('Request %s blocked by robots.txt' % request.url)
 			return 0
