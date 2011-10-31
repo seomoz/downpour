@@ -168,10 +168,10 @@ class CachedFetcher(BaseFetcher):
 		# Make two generators for exists/request pairs
 		g1, g2 = tee((exists(request, self.base), request) for request in requests)
 		# Extend for those that haven't been cached
-		self.fetcher.extend(CachedRequest(request.url, self.base, request) for exists, request in g1 if not exists)
+		self.fetcher.extend(CachedRequest(request.url, self.base, request) for e, request in g1 if not e)
 		count = 0
-		for exists, request in g2:
-			if exists:
+		for e, request in g2:
+			if e:
 				count += 1
 				self.serviceable.append(request)
 		self.serveNext()
