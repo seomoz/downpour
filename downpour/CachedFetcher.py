@@ -69,11 +69,13 @@ def service(request, base):
 	try:
 		url = request.url
 		while url:
+			logger.debug('Url => %s' % url)
 			# Follow redirects indefinitely. Build the path it would have in the cache
 			path = os.path.join(base, makePath(url))
 			# If the path doesn't exist, we can't service this request from
 			# the cache, so we should return the current url we're working on
 			if not os.path.exists(path):
+				logger.debug('Cached entry does not exist.')
 				return url
 			# Otherwise, read the file we have cached and attempt to service the request
 			with file(getPath(path), 'r') as f:
@@ -192,27 +194,28 @@ class CachedFetcher(object):
 		
 	# Pass the buck
 	def push(self, request):
-		with self.lock:
-			count = 0
-			# Get the URL we'd like to service, or None if we serviced it
-			url = service(request, self.base)
-			if url:
-				# If we did get a URL back
-				logger.debug('%s is not completely cached.' % request.url)
-				count += self.fetcher.push(CachedRequest(url, self.base, request))
-			return count
+		logger.debug('CachedFetcher::push(%s)' % request.url)
+		count = 0
+		# Get the URL we'd like to service, or None if we serviced it
+		url = service(request, self.base)
+		if url:
+			# If we did get a URL back
+			logger.debug('%s is not completely cached.' % request.url)
+			count += self.fetcher.push(CachedRequest(url, self.base, request))
+		return count
 
 	# Pass the buck
 	def extend(self, requests):
-		with self.lock:
-			count = 0
-			for r in requests:
-				url = service(r, self.base)
-				if url:
-					# If we did get a URL back
-					logger.debug('%s is not completely cached.' % r.url)
-					count += self.fetcher.push(CachedRequest(url, self.base, r))
-			return count
+		logger.debug('CachedFetcher::extend')
+		count = 0
+		for r in requests:
+			logger.debug('Attempting to service request')
+			url = service(r, self.base)
+			if url:
+				# If we did get a URL back
+				logger.debug('%s is not completely cached.' % r.url)
+				count += self.fetcher.push(CachedRequest(url, self.base, r))
+		return count
 	
 	def onDone(self, request):
 		pass
