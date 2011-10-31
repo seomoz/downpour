@@ -71,8 +71,6 @@ def service(request, base):
 		# Only allow up to this many redirects
 		redirects = 20
 		while url and redirects:
-			print 'Url => %s' % url
-			logger.debug('Url => %s' % url)
 			# Follow redirects indefinitely. Build the path it would have in the cache
 			path = os.path.join(base, makePath(url))
 			# If the path doesn't exist, we can't service this request from
@@ -107,7 +105,6 @@ def service(request, base):
 				# Otherwise, save this url, and remove a redirect
 				url = u
 				redirects -= 1
-				print 'Forwarded to %s' % url
 				logger.debug('Forwarded to %s' % url)
 				# Just move on to the next followed url
 				continue
@@ -208,7 +205,6 @@ class CachedFetcher(object):
 		
 	# Pass the buck
 	def push(self, request):
-		logger.debug('CachedFetcher::push(%s)' % request.url)
 		count = 0
 		# Get the URL we'd like to service, or None if we serviced it
 		url = service(request, self.base)
@@ -220,10 +216,8 @@ class CachedFetcher(object):
 
 	# Pass the buck
 	def extend(self, requests):
-		logger.debug('CachedFetcher::extend')
 		count = 0
 		for r in requests:
-			logger.debug('Attempting to service request')
 			url = service(r, self.base)
 			if url:
 				# If we did get a URL back
