@@ -38,7 +38,7 @@ def makePath(url):
 	# So, instead, I'm just going to provide the python-provided hash
 	# of the entire url as the string. It's sad that it's a one-way mapping,
 	# but it appears to be the only way.
-	return os.path.join(path, url.__hash__())
+	return os.path.join(path, str(url.__hash__()))
 
 def getPath(path):
 	# Ensure that there's a directory
