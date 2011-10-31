@@ -24,8 +24,21 @@ def makePath(url):
 	path = os.path.join(path, str(parsed.port) or '80')
 	# We need to strip off the first '/'
 	path = os.path.join(path, *[p for p in parsed.path.split('/') if p])
-	path = os.path.join(path, base64.b64encode(url))
-	return path
+	# There's not a really good way to do this in a way that preserves
+	# the actual URL in the filename. Originally, I tried using base64
+	# encoding, but that can quickly lead to filenames that are too long
+	# for the filesystem.
+	#
+	# Other serialization techniques make it difficult to distinguish 
+	# directories from files. For example, if you say that for all urls
+	# that are just a directory, turn it into dir/index, that precludes
+	# the possibility of dir/index/*. Basically, we can't have any file
+	# names that could appear in the URL as a directory.
+	#
+	# So, instead, I'm just going to provide the python-provided hash
+	# of the entire url as the string. It's sad that it's a one-way mapping,
+	# but it appears to be the only way.
+	return os.path.join(path, url.__hash__())
 
 def getPath(path):
 	# Ensure that there's a directory
@@ -36,6 +49,11 @@ def getPath(path):
 		# Ignore if the directory exists
 		pass
 	return path
+
+def store(base, url, obj):
+	path = os.path.join(base, makePath(url))
+	with file(getPath(path), 'w+') as f:
+		pickle.dump(obj, f)
 
 # Service this particular request
 def service(request, base):
@@ -94,23 +112,20 @@ class CachedRequest(BaseRequest):
 	# returning anything. Just go ahead and do what you need
 	# to do with the input!
 	def onSuccess(self, text):
-		path = os.path.join(self.base, makePath(self.url))
-		with file(getPath(path), 'w+') as f:
-			pickle.dump({
-				'status': self.status,
-				'headers': self.headers,
-				'success': text
-			}, f)
+		store(self.base, self.url, {
+			'status': self.status,
+			'headers': self.headers,
+			'success': text
+		})
 		self.request.onSuccess(text)
 	
 	def onError(self, failure):
-		path = os.path.join(self.base, makePath(self.url))
-		with file(getPath(path), 'w+') as f:
-			pickle.dump({
-				'status': self.status,
-				'headers': self.headers,
-				'error': failure
-			}, f)
+		# First, try to store this obj
+		store(self.base, self.url, {
+			'status': self.status,
+			'headers': self.headers,
+			'error': failure
+		})
 		self.request.onError(failure)
 	
 	def onDone(self, response):
@@ -125,14 +140,12 @@ class CachedRequest(BaseRequest):
 		self.request.onStatus(version, status, message)
 	
 	def onURL(self, url):
-		path = os.path.join(self.base, makePath(self.url))
-		# Now, we should write what information we have out
-		with file(getPath(path), 'w+') as f:
-			pickle.dump({
-				'url': url,
-				'status': self.status,
-				'headers': self.headers,
-			}, f)
+		store(self.base, self.url, {
+			'url': url,
+			'status': self.status,
+			'headers': self.headers,
+		})
+		self.url = url
 
 class CachedFetcher(BaseFetcher):
 	def __init__(self, fetcher, base='./'):

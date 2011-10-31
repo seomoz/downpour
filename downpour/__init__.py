@@ -14,6 +14,7 @@ except ImportError:
 	except ImportError:
 		print 'Using select reactor'
 
+import re
 import threading	
 from twisted.web import client, error
 from twisted.internet import reactor, ssl
@@ -64,11 +65,12 @@ class RequestServicer(client.HTTPClientFactory):
 		client.HTTPClientFactory.gotStatus(self, version, status, message)
 
 class BaseRequest(object):
+	urlRE = re.compile(r'#.+$')
 	timeout = 45
 	redirectLimit = 10
 	
 	def __init__(self, url):
-		self.url = url
+		self.url = self.urlRE.sub('', url)
 	
 	def __del__(self):
 		logger.debug('Deleting request for %s' % self.url)
