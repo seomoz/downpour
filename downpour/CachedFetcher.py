@@ -202,11 +202,11 @@ class CachedFetcher(object):
 	def extend(self, requests):
 		count = 0
 		for r in requests:
-			url = service(request, self.base)
+			url = service(r, self.base)
 			if url:
 				# If we did get a URL back
-				logger.debug('%s is not completely cached.' % request.url)
-				count += self.fetcher.push(CachedRequest(url, self.base, request))
+				logger.debug('%s is not completely cached.' % r.url)
+				count += self.fetcher.push(CachedRequest(url, self.base, r))
 		return count
 	
 	def onDone(self, request):
