@@ -121,6 +121,10 @@ def service(request, base):
 				reactor.callLater(0, d.callback, failure)
 				# We were able to service this request, so return None
 				return None
+			
+			# If we didn't get cauth on anything up to this point, then we'll
+			# presume that we don't have it correctly stored. So, return the url
+			return url
 	except:
 		logger.exception('Failed to run service %s' % request.url)
 		return None
