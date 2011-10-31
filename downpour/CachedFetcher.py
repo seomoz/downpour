@@ -154,11 +154,15 @@ class CachedRequest(BaseRequest):
 		})
 		self.url = url
 
-class CachedFetcher(BaseFetcher):
+class CachedFetcher(object):
+	# The cached fetcher should implement the same /interface/, but should not
+	# inherit base functionality from the BaseFetcher class. To do so would mean
+	# potentially accidentally calling code centered around /actually/ fetching
+	# asynchronously, when this implements synchronous caching, and otherwise
+	# passes the buck to the provided fetcher
 	def __init__(self, fetcher, base='./'):
 		# Only service one request at a time. It's ok, though -- we're not going to
 		# be relying on this too heavily.
-		BaseFetcher.__init__(self, 1)
 		self.fetcher = fetcher
 		# It's important to get the absolute path
 		self.base = os.path.abspath(base)
@@ -196,6 +200,25 @@ class CachedFetcher(BaseFetcher):
 				self.serviceable.append(request)
 		self.serveNext()
 		return count
+	
+	def onDone(self, request):
+		pass
+
+	def onSuccess(self, request):
+		pass
+
+	def onError(self, request):
+		pass
+	
+	# These are internal callbacks
+	def done(self, request):
+		logger.warn('CachedFetcher::done called')
+
+	def success(self, request):
+		logger.warn('CachedFetcher::success called')
+
+	def error(self, failure):
+		logger.warn('CachedFetcher::error called')
 	
 	def serveNext(self):
 		while len(self.serviceable):
