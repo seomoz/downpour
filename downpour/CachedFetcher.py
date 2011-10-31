@@ -68,7 +68,10 @@ def service(request, base):
 	or None if it was possible to service completely.'''
 	try:
 		url = request.url
-		while url:
+		# Only allow up to this many redirects
+		redirects = 20
+		while url and redirects:
+			print 'Url => %s' % url
 			logger.debug('Url => %s' % url)
 			# Follow redirects indefinitely. Build the path it would have in the cache
 			path = os.path.join(base, makePath(url))
@@ -81,27 +84,34 @@ def service(request, base):
 			with file(getPath(path), 'r') as f:
 				logger.debug('Reading from cache %s => %s' % (url, path))
 				obj = pickle.load(f)
-		
+			
 			# Invoke the status callback
 			status = obj.get('status', None)
 			if status:
 				logger.debug('onStatus(%s)' % ', '.join(status))
 				# This is a tuple, so we need to expand it
 				request.onStatus(*status)
-		
+			
 			# Now invoke the headers callback
 			headers = obj.get('headers', None)
 			if headers:
 				logger.debug('onHeaders(%s)' % repr(headers))
 				request.onHeaders(headers)
-		
+			
 			# Now, we'll either invoke the onURL, or the onDone, etc. callbacks
-			url = obj.get('url', None)
-			if url:
+			u = obj.get('url', None)
+			if u and u == url:
+				# If it's referring to itself, then just got ahead and break out of the loop
+				return url
+			elif u:
+				# Otherwise, save this url, and remove a redirect
+				url = u
+				redirects -= 1
+				print 'Forwarded to %s' % url
 				logger.debug('Forwarded to %s' % url)
 				# Just move on to the next followed url
 				continue
-		
+			
 			# The success callback
 			success = obj.get('success', None)
 			if success:
@@ -111,7 +121,7 @@ def service(request, base):
 				reactor.callLater(0, d.callback, success)
 				# We were able to service this request, so return None
 				return None
-		
+			
 			# The failure callback
 			failure = obj.get('error', None)
 			if failure:
