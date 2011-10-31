@@ -51,9 +51,16 @@ def getPath(path):
 	return path
 
 def store(base, url, obj):
-	path = os.path.join(base, makePath(url))
-	with file(getPath(path), 'w+') as f:
-		pickle.dump(obj, f)
+	# I think it's best that this doesn't throw any exceptions.
+	# Even though the callbacks onSuccess, onError, etc. are protected in
+	# their own try/except blocks, a failure here should not preclude the
+	# execution of the base request's callback
+	try:
+		path = os.path.join(base, makePath(url))
+		with file(getPath(path), 'w+') as f:
+			pickle.dump(obj, f)
+	except:
+		logger.exception('Problem storing %s from %s' % (repr(obj), url))
 
 # Service this particular request
 def service(request, base):
@@ -62,36 +69,36 @@ def service(request, base):
 	while url:
 		path = os.path.join(base, makePath(url))
 		with file(getPath(path), 'r') as f:
-			logger.debug('\tReading %s' % path)
+			logger.debug('Reading from cache %s => %s' % (url, path))
 			obj = pickle.load(f)
 		# Invoke the status callback
 		status = obj.get('status', None)
 		if status:
-			logger.debug('\tonStatus(%s)' % ', '.join(status))
+			logger.debug('onStatus(%s)' % ', '.join(status))
 			# This is a tuple, so we need to expand it
 			request.onStatus(*status)
 		# Now invoke the headers callback
 		headers = obj.get('headers', None)
 		if headers:
-			logger.debug('\tonHeaders(%s)' % repr(headers))
+			logger.debug('onHeaders(%s)' % repr(headers))
 			request.onHeaders(headers)
 		# Now, we'll either invoke the onURL, or the onDone, etc. callbacks
 		url = obj.get('url', None)
 		if url:
-			logger.debug('\tForwarded to %s' % url)
+			logger.debug('Forwarded to %s' % url)
 			# Just move on to the next followed url
 			continue
 		# The success callback
 		success = obj.get('success', None)
 		if success:
-			logger.debug('\tonSuccess')
+			logger.debug('onSuccess')
 			d = defer.Deferred()
 			d.addCallback(request.onSuccess).addBoth(request.onDone)
 			reactor.callLater(0, d.callback, success)
 		# The failure callback
 		failure = obj.get('error', None)
 		if failure:
-			logger.debug('\tonError')
+			logger.debug('onError')
 			d = defer.Deferred()
 			d.addCallback(request.onError).addBoth(request.onDone)
 			reactor.callLater(0, d.callback, failure)
