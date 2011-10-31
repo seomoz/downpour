@@ -160,11 +160,13 @@ class BaseFetcher(object):
 	def push(self, request):
 		self.requests.append(request)
 		self.serveNext()
+		return 1
 	
 	# This is how to fetch several more requests
 	def extend(self, requests):
 		self.requests.extend(requests)
 		self.serveNext()
+		return len(requests)
 	
 	# These can be overridden to do various post-processing. For example, 
 	# you might want to add more requests, etc.

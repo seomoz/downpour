@@ -158,6 +158,7 @@ class CachedFetcher(BaseFetcher):
 			logger.debug('%s is cached.' % request.url)
 			self.serviceable.append(request)
 		self.serveNext()
+		return 1
 
 	# Pass the buck
 	def extend(self, requests):
@@ -168,10 +169,13 @@ class CachedFetcher(BaseFetcher):
 		g1, g2 = tee((exists(request, self.base), request) for request in requests)
 		# Extend for those that haven't been cached
 		self.fetcher.extend(CachedRequest(request.url, self.base, request) for exists, request in g1 if not exists)
+		count = 0
 		for exists, request in g2:
 			if exists:
+				count += 1
 				self.serviceable.append(request)
 		self.serveNext()
+		return count
 	
 	def serveNext(self):
 		while len(self.serviceable):
