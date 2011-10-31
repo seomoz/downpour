@@ -5,6 +5,7 @@
 import os
 import base64
 import urlparse
+import threading
 import cPickle as pickle
 from downpour import logger
 from downpour import reactor
@@ -182,6 +183,8 @@ class CachedFetcher(object):
 		self.fetcher = fetcher
 		# It's important to get the absolute path
 		self.base = os.path.abspath(base)
+		# We need a lock for pushing / extending
+		self.lock = threading.Lock()
 	
 	# For completeness of the interface
 	def __len__(self):
@@ -189,25 +192,27 @@ class CachedFetcher(object):
 		
 	# Pass the buck
 	def push(self, request):
-		count = 0
-		# Get the URL we'd like to service, or None if we serviced it
-		url = service(request, self.base)
-		if url:
-			# If we did get a URL back
-			logger.debug('%s is not completely cached.' % request.url)
-			count += self.fetcher.push(CachedRequest(url, self.base, request))
-		return count
+		with self.lock:
+			count = 0
+			# Get the URL we'd like to service, or None if we serviced it
+			url = service(request, self.base)
+			if url:
+				# If we did get a URL back
+				logger.debug('%s is not completely cached.' % request.url)
+				count += self.fetcher.push(CachedRequest(url, self.base, request))
+			return count
 
 	# Pass the buck
 	def extend(self, requests):
-		count = 0
-		for r in requests:
-			url = service(r, self.base)
-			if url:
-				# If we did get a URL back
-				logger.debug('%s is not completely cached.' % r.url)
-				count += self.fetcher.push(CachedRequest(url, self.base, r))
-		return count
+		with self.lock:
+			count = 0
+			for r in requests:
+				url = service(r, self.base)
+				if url:
+					# If we did get a URL back
+					logger.debug('%s is not completely cached.' % r.url)
+					count += self.fetcher.push(CachedRequest(url, self.base, r))
+			return count
 	
 	def onDone(self, request):
 		pass
