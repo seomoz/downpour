@@ -62,50 +62,66 @@ def store(base, url, obj):
 	except:
 		logger.exception('Problem storing %s from %s' % (repr(obj), url))
 
-# Service this particular request
 def service(request, base):
-	# Alright, follow redirects indefinitely
-	url = request.url
-	while url:
-		path = os.path.join(base, makePath(url))
-		with file(getPath(path), 'r') as f:
-			logger.debug('Reading from cache %s => %s' % (url, path))
-			obj = pickle.load(f)
-		# Invoke the status callback
-		status = obj.get('status', None)
-		if status:
-			logger.debug('onStatus(%s)' % ', '.join(status))
-			# This is a tuple, so we need to expand it
-			request.onStatus(*status)
-		# Now invoke the headers callback
-		headers = obj.get('headers', None)
-		if headers:
-			logger.debug('onHeaders(%s)' % repr(headers))
-			request.onHeaders(headers)
-		# Now, we'll either invoke the onURL, or the onDone, etc. callbacks
-		url = obj.get('url', None)
-		if url:
-			logger.debug('Forwarded to %s' % url)
-			# Just move on to the next followed url
-			continue
-		# The success callback
-		success = obj.get('success', None)
-		if success:
-			logger.debug('onSuccess')
-			d = defer.Deferred()
-			d.addCallback(request.onSuccess).addBoth(request.onDone)
-			reactor.callLater(0, d.callback, success)
-		# The failure callback
-		failure = obj.get('error', None)
-		if failure:
-			logger.debug('onError')
-			d = defer.Deferred()
-			d.addCallback(request.onError).addBoth(request.onDone)
-			reactor.callLater(0, d.callback, failure)
-
-# Do we have a cached copy?
-def exists(request, base):
-	return os.path.exists(os.path.join(base, makePath(request.url)))
+	'''Attempt to service a particular request. Return the url to request
+	or None if it was possible to service completely.'''
+	try:
+		url = request.url
+		while url:
+			# Follow redirects indefinitely. Build the path it would have in the cache
+			path = os.path.join(base, makePath(url))
+			# If the path doesn't exist, we can't service this request from
+			# the cache, so we should return the current url we're working on
+			if not os.path.exists(path):
+				return url
+			# Otherwise, read the file we have cached and attempt to service the request
+			with file(getPath(path), 'r') as f:
+				logger.debug('Reading from cache %s => %s' % (url, path))
+				obj = pickle.load(f)
+		
+			# Invoke the status callback
+			status = obj.get('status', None)
+			if status:
+				logger.debug('onStatus(%s)' % ', '.join(status))
+				# This is a tuple, so we need to expand it
+				request.onStatus(*status)
+		
+			# Now invoke the headers callback
+			headers = obj.get('headers', None)
+			if headers:
+				logger.debug('onHeaders(%s)' % repr(headers))
+				request.onHeaders(headers)
+		
+			# Now, we'll either invoke the onURL, or the onDone, etc. callbacks
+			url = obj.get('url', None)
+			if url:
+				logger.debug('Forwarded to %s' % url)
+				# Just move on to the next followed url
+				continue
+		
+			# The success callback
+			success = obj.get('success', None)
+			if success:
+				logger.debug('onSuccess')
+				d = defer.Deferred()
+				d.addCallback(request.onSuccess).addBoth(request.onDone)
+				reactor.callLater(0, d.callback, success)
+				# We were able to service this request, so return None
+				return None
+		
+			# The failure callback
+			failure = obj.get('error', None)
+			if failure:
+				logger.debug('onError')
+				d = defer.Deferred()
+				d.addCallback(request.onError).addBoth(request.onDone)
+				reactor.callLater(0, d.callback, failure)
+				# We were able to service this request, so return None
+				return None
+	except:
+		logger.exception('Failed to run service %s' % request.url)
+		return None
+	return None
 
 class CachedRequest(BaseRequest):
 	def __init__(self, url, base, request):
@@ -166,8 +182,6 @@ class CachedFetcher(object):
 		self.fetcher = fetcher
 		# It's important to get the absolute path
 		self.base = os.path.abspath(base)
-		# A list of requests serviceable by the cache
-		self.serviceable = []
 	
 	# For completeness of the interface
 	def __len__(self):
@@ -175,30 +189,24 @@ class CachedFetcher(object):
 		
 	# Pass the buck
 	def push(self, request):
-		if not exists(request, self.base):
-			logger.debug('%s is not cached.' % request.url)
-			self.fetcher.push(CachedRequest(request.url, self.base, request))
-		else:
-			logger.debug('%s is cached.' % request.url)
-			self.serviceable.append(request)
-		self.serveNext()
-		return 1
+		count = 0
+		# Get the URL we'd like to service, or None if we serviced it
+		url = service(request, self.base)
+		if url:
+			# If we did get a URL back
+			logger.debug('%s is not completely cached.' % request.url)
+			count += self.fetcher.push(CachedRequest(url, self.base, request))
+		return count
 
 	# Pass the buck
 	def extend(self, requests):
-		# This is a pretty clever piece of code found on StackOverflow. Props to Ants Aasma:
-		# http://stackoverflow.com/q/949098/173556
-		from itertools import tee
-		# Make two generators for exists/request pairs
-		g1, g2 = tee((exists(request, self.base), request) for request in requests)
-		# Extend for those that haven't been cached
-		self.fetcher.extend(CachedRequest(request.url, self.base, request) for e, request in g1 if not e)
 		count = 0
-		for e, request in g2:
-			if e:
-				count += 1
-				self.serviceable.append(request)
-		self.serveNext()
+		for r in requests:
+			url = service(request, self.base)
+			if url:
+				# If we did get a URL back
+				logger.debug('%s is not completely cached.' % request.url)
+				count += self.fetcher.push(CachedRequest(url, self.base, request))
 		return count
 	
 	def onDone(self, request):
@@ -219,10 +227,6 @@ class CachedFetcher(object):
 
 	def error(self, failure):
 		logger.warn('CachedFetcher::error called')
-	
-	def serveNext(self):
-		while len(self.serviceable):
-			service(self.serviceable.pop(), self.base)
 	
 	def start(self):
 		self.fetcher.start()

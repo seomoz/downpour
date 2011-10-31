@@ -24,7 +24,7 @@ class PoliteFetcher(BaseFetcher):
 	
 	def __len__(self):
 		return len(self.pldQueue) + len(self.requests)
-		
+	
 	def getKey(self, req):
 		# This actually considers the whole domain name, including subdomains, uniquely
 		# This aliasing is just in case we want to change that scheme later, easily
