@@ -134,8 +134,8 @@ def service(request, base):
 			return url
 	except:
 		logger.exception('Failed to run service %s' % request.url)
-		return None
-	return None
+		return url
+	return url
 
 class CachedRequest(BaseRequest):
 	def __init__(self, url, base, request):
