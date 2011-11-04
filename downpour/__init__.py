@@ -63,15 +63,9 @@ class BaseRequestServicer(client.HTTPClientFactory):
 			self.host = host
 			self.port = port
 			self.path = url
-			self.url = urlparse.urlunparse((scheme, host, url, '', '', ''))
-		else:
 			self.url = url
-			scheme, host, port, path = _parse(url)
-			if scheme and host:
-				self.scheme = scheme
-				self.host = host
-				self.port = port
-			self.path = path
+		else:
+			client.HTTPClientFactory.setURL(self, url)
 		logger.debug('URL: %s' % self.url)
 	
 	def gotHeaders(self, headers):
