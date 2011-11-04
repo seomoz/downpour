@@ -55,7 +55,24 @@ class BaseRequestServicer(client.HTTPClientFactory):
 			self.request.onURL(url)
 		except:
 			logger.exception('%s onURL failed' % self.request.url)
-		client.HTTPClientFactory.setURL(self, url)
+		scheme, host, port, path = client._parse(url)
+		proxy = os.environ.get('%s_proxy' % scheme)
+		if proxy:
+			scheme, host, port, path = client._parse(proxy)
+			self.scheme = scheme
+			self.host = host
+			self.port = port
+			self.path = url
+			self.url = urlparse.urlunparse((scheme, host, url, '', '', ''))
+		else:
+			self.url = url
+			scheme, host, port, path = _parse(url)
+			if scheme and host:
+				self.scheme = scheme
+				self.host = host
+				self.port = port
+			self.path = path
+		logger.debug('URL: %s' % self.url)
 	
 	def gotHeaders(self, headers):
 		try:
@@ -70,21 +87,6 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		except:
 			logger.exception('%s onStatus failed' % self.request.url)
 		client.HTTPClientFactory.gotStatus(self, version, status, message)
-
-class ProxyRequestServicer(BaseRequestServicer):
-	def setURL(self, url):
-		scheme, host, port, path = client._parse(url)
-		proxy = os.environ.get('%s_proxy' % scheme)
-		if proxy:
-			scheme, host, port, path = client._parse(proxy)
-			self.scheme = scheme
-			self.host = host
-			self.port = port
-			self.path = url
-			self.url = urlparse.urlunparse((scheme, host, url, '', '', ''))
-		else:
-			BaseRequestService.setURL(self, url)
-		logger.debug('URL: %s' % self.url)
 
 class BaseRequest(object):
 	urlRE = re.compile(r'#.+$')
@@ -253,15 +255,14 @@ class BaseFetcher(object):
 					# This is the expansion of the short version getPage
 					# and is taken from twisted's source
 					scheme, host, port, path = client._parse(r.url)
+					factory = BaseRequestServicer(r, self.agent)
 					# If http_proxy or https_proxy, or whatever appropriate proxy
-					# is set, then we should try to honor that
+					# is set, then we should try to honor that. We do so simply 
+					# by overriding the host/port we'll connect to. The client
+					# factory, BaseRequestServicer takes care of the rest
 					proxy = os.environ.get('%s_proxy' % scheme)
 					if proxy:
-						factory = ProxyRequestServicer(r, self.agent)
 						scheme, host, port, path = client._parse(proxy)
-						logger.debug('Using proxy @ %s' % proxy)
-					else:
-						factory = BaseRequestServicer(r, self.agent)
 					if scheme == 'https':
 						from twisted.internet import ssl
 						contextFactory = ssl.ClientContextFactory()
