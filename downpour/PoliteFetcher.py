@@ -38,13 +38,16 @@ class PoliteFetcher(BaseFetcher):
 		'''How long to wait before getting the next page from this domain?'''
 		# Until I can find a way to make this all asynchronous, going to have to omit it
 		#return reppy.crawlDelay(url, self.agent, self.userAgentString) or self.delay
+		# No delay for requests that were serviced from cache
+		if request.cached:
+			return 0
 		return self.delay
 	
 	# Event callbacks
 	def onDone(self, request):
 		# Use the robots.txt delay, defaulting to our own
 		key = self.getKey(request)
-		delay = time.time() + self.crawlDelay(request.url)
+		delay = time.time() + self.crawlDelay(request)
 		self.pldQueue.push((delay, key))
 	
 	#################

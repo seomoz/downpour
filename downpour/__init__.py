@@ -48,6 +48,7 @@ observer.start()
 class BaseRequestServicer(client.HTTPClientFactory):
 	def __init__(self, request, agent):
 		self.request = request
+		self.request.cached = True
 		client.HTTPClientFactory.__init__(self, url=request.url, agent=agent, timeout=request.timeout, redirectLimit=request.redirectLimit)
 	
 	def setURL(self, url):
@@ -56,9 +57,9 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		except:
 			logger.exception('%s onURL failed' % self.request.url)
 		scheme, host, port, path = client._parse(url)
-		proxy = os.environ.get('%s_proxy' % scheme)
-		if proxy:
-			scheme, host, port, path = client._parse(proxy)
+		self.proxy = os.environ.get('%s_proxy' % scheme)
+		if self.proxy:
+			scheme, host, port, path = client._parse(self.proxy)
 			self.scheme = scheme
 			self.host = host
 			self.port = port
@@ -71,6 +72,10 @@ class BaseRequestServicer(client.HTTPClientFactory):
 	def gotHeaders(self, headers):
 		try:
 			self.request.onHeaders(headers)
+			# This request is marked as cached iff every request was served out
+			# of the cache specified, and it was a hit.
+			cached = self.proxy and ('HIT from %s' % self.host) in ';'.join(headers.get('x-cache', ''))
+			self.request.cached = self.request.cached and cached
 		except:
 			logger.exception('%s onHeaders failed' % self.request.url)
 		client.HTTPClientFactory.gotHeaders(self, headers)
@@ -97,6 +102,7 @@ class BaseRequest(object):
 	# returning anything. Just go ahead and do what you need
 	# to do with the input!
 	def onSuccess(self, text):
+		print repr(self.cached)
 		pass
 	
 	def onError(self, failure):
