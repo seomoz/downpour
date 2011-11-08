@@ -32,8 +32,10 @@ except ImportError:
 		'dependencies' : ['reppy', 'qr', 'twisted']
 	}
 
+from downpour import __version__
+
 setup(name       = 'downpour',
-	version      = '0.1.0',
+	version      = __version__,
 	description  = 'Fetch urls. Fast.',
 	long_description = 'Uses twisted to fetch URLs asynchronously, with callbacks. Fast.',
 	url          = 'http://github.com/seomoz/downpour',

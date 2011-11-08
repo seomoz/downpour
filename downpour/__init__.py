@@ -21,6 +21,14 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+__author__     = 'Dan Lecocq'
+__copyright__  = '2011 SEOmoz'
+__license__    = 'SEOmoz'
+__version__    = '0.1.0'
+__maintainer__ = 'Dan Lecocq'
+__email__      = 'dan@seomoz.org'
+__status__     = 'Development'
+
 # This tries to import the most efficient reactor 
 # that's available on the system.
 try:
