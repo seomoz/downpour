@@ -186,34 +186,34 @@ class BaseRequest(object):
 		pass
 	
 	# Finished
-	def done(request, response, fetcher):
+	def done(self, response, fetcher):
 		try:
-			request.onDone(response, fetcher)
+			self.onDone(response, fetcher)
 			del self.factory
 		except Exception as e:
 			logger.exception('Request done handler failed')
-		return request
+		return self
 
 	# Made contact
-	def success(request, response, fetcher):
+	def success(self, response, fetcher):
 		try:
-			logger.info('Successfully fetched %s' % request.url)
-			request.onSuccess(response, fetcher)
+			logger.info('Successfully fetched %s' % self.url)
+			self.onSuccess(response, fetcher)
 		except Exception as e:
 			logger.exception('Request success handler failed')
-		return request
+		return self
 
 	# Failed to made contact
-	def error(request, failure, fetcher):
+	def error(self, failure, fetcher):
 		try:
 			try:
 				failure.raiseException()
 			except:
-				logger.exception('Failed for %s' % request.url)
-			request.onError(failure, fetcher)
+				logger.exception('Failed for %s' % self.url)
+			self.onError(failure, fetcher)
 		except Exception as e:
 			logger.exception('Request error handler failed')
-		return Failure(request)
+		return Failure(self)
 
 class BaseFetcher(object):
 	def __init__(self, poolSize=10, urls=None, agent=None):
