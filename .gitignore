@@ -1,0 +1,5 @@
+build/*
+dist/*
+downpour.egg-info/*
+*.pyc
+
