@@ -74,10 +74,23 @@ logger.addHandler(handler)
 observer = log.PythonLoggingObserver()
 observer.start()
 
+class UserPreemptionError(error.Error):
+	def __init__(self, code, reason):
+		error.Error(self, code, reason)
+		self.reason = reason
+		self.code = code
+	
+	def __repr__(self):
+		return '%s => %s' % (self.code, repr(self.reason))
+	
+	def __str__(self):
+		return '%s => %s' % (self.code, str(self.reason))
+
 class BaseRequestServicer(client.HTTPClientFactory):
 	def __init__(self, request, agent):
 		self.request = request
 		self.request.cached = True
+		self.request.factory = self
 		client.HTTPClientFactory.__init__(self, url=request.url, agent=agent, timeout=request.timeout, redirectLimit=request.redirectLimit)
 	
 	def setURL(self, url):
@@ -115,6 +128,20 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		except:
 			logger.exception('%s onStatus failed' % self.request.url)
 		client.HTTPClientFactory.gotStatus(self, version, status, message)
+	
+	def buildProtocol(self, *args, **kwargs):
+		'''In order to facilitate user preemption, we need to remember
+		the protocol we made. So, save it and pass through.'''
+		self.p = client.HTTPClientFactory.buildProtocol(self, *args, **kwargs)
+		return self.p
+	
+	def cancel(self, reason):
+		'''If the user needs to preempt the transfer. For example, if looking
+		at the content headers, we decide we don't want to get the file.'''
+		err = UserPreemptionError(self.status, reason)
+		self.noPage(Failure(err))
+		self.p.quietLoss = True
+		self.p.transport.loseConnection()
 
 class BaseRequest(object):
 	urlRE = re.compile(r'#.+$')
@@ -127,17 +154,22 @@ class BaseRequest(object):
 	def __del__(self):
 		logger.debug('Deleting request for %s' % self.url)
 	
+	def cancel(self, reason):
+		'''If for any reason, you discover you don't want to fetch
+		this particular resource, then you can cancel it'''
+		self.factory.cancel(reason)
+	
 	# Inheritable callbacks. You don't need to worry about
 	# returning anything. Just go ahead and do what you need
 	# to do with the input!
-	def onSuccess(self, text):
+	def onSuccess(self, text, fetcher):
 		print repr(self.cached)
 		pass
 	
-	def onError(self, failure):
+	def onError(self, failure, fetcher):
 		pass
 	
-	def onDone(self, response):
+	def onDone(self, response, fetcher):
 		pass
 	
 	def onHeaders(self, headers):
@@ -154,30 +186,30 @@ class BaseRequest(object):
 		pass
 	
 	# Finished
-	def done(request, response):
+	def done(request, response, fetcher):
 		try:
-			request.onDone(response)
+			request.onDone(response, fetcher)
 		except Exception as e:
 			logger.exception('Request done handler failed')
 		return request
 
 	# Made contact
-	def success(request, response):
+	def success(request, response, fetcher):
 		try:
 			logger.info('Successfully fetched %s' % request.url)
-			request.onSuccess(response)
+			request.onSuccess(response, fetcher)
 		except Exception as e:
 			logger.exception('Request success handler failed')
 		return request
 
 	# Failed to made contact
-	def error(request, failure):
+	def error(request, failure, fetcher):
 		try:
 			try:
 				failure.raiseException()
 			except:
 				logger.exception('Failed for %s' % request.url)
-			request.onError(failure)
+			request.onError(failure, fetcher)
 		except Exception as e:
 			logger.exception('Request error handler failed')
 		return Failure(request)
@@ -192,11 +224,6 @@ class BaseFetcher(object):
 		self.processed = 0
 		self.remaining = 0
 		self.agent = agent or 'rogerbot/1.0'
-	
-	def download(self, r):
-		self.remaining += 1
-		self.requests.append(r)
-		self.serveNext()
 	
 	# This is how subclasses communicate how many requests they have 
 	# left to fulfill. 
@@ -222,6 +249,12 @@ class BaseFetcher(object):
 		self.requests.extend(requests)
 		self.serveNext()
 		return len(requests)
+	
+	# This is a way for the fetcher to let you know that it is capable of
+	# handling more requests than are currently enqueued. Returns how much
+	# the queue grew by
+	def grow(self):
+		return 0
 	
 	# These can be overridden to do various post-processing. For example, 
 	# you might want to add more requests, etc.
@@ -298,9 +331,9 @@ class BaseFetcher(object):
 						reactor.connectSSL(host, port, factory, contextFactory)
 					else:
 						reactor.connectTCP(host, port, factory)
-					factory.deferred.addCallback(r.success).addCallback(self.success)
-					factory.deferred.addErrback(r.error).addErrback(self.error).addErrback(log.err)
-					factory.deferred.addBoth(r.done).addBoth(self.done)
+					factory.deferred.addCallback(r.success, self).addCallback(self.success)
+					factory.deferred.addErrback(r.error, self).addErrback(self.error).addErrback(log.err)
+					factory.deferred.addBoth(r.done, self).addBoth(self.done)
 				except:
 					self.numFlight -= 1
 					logger.exception('Unable to request %s' % r.url)

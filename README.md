@@ -110,11 +110,6 @@ a set of requests, and then a user-agent to use for requests. You must implement
 	class MyFetcher(downpour.BaseFetcher):
 		'''Arguably the best fetcher ever'''
 		
-		def download(self, r):
-			'''Enqueue the request r to be fetched by me.'''
-			# Serve the next request, if there is one ready
-			self.serveNext()
-		
 		def __len__(self):
 			'''How many requests remain to be fetched?'''
 		

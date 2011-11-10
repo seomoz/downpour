@@ -36,7 +36,7 @@ class PoliteFetcher(BaseFetcher):
 		BaseFetcher.__init__(self, poolSize)
 		self.pldQueue = qr.Queue('plds')
 		self.requests = qr.Queue('request', **kwargs)
-		self.delay = delay
+		self.delay = float(delay)
 		self.timer = None
 		# This is a way to ignore the allow/disallow directives
 		# For example, if you're checking for allow in other places
@@ -55,7 +55,7 @@ class PoliteFetcher(BaseFetcher):
 		'''Are we allowed to fetch this url/urls?'''
 		return self.allowAll or reppy.allowed(url, self.agent, self.userAgentString)
 	
-	def crawlDelay(self, url):
+	def crawlDelay(self, request):
 		'''How long to wait before getting the next page from this domain?'''
 		# Until I can find a way to make this all asynchronous, going to have to omit it
 		#return reppy.crawlDelay(url, self.agent, self.userAgentString) or self.delay
