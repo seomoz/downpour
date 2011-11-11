@@ -28,13 +28,20 @@ from downpour import BaseFetcher, logger, reactor
 import qr
 import time
 import reppy
+import redis
 import urlparse
 
 class PoliteFetcher(BaseFetcher):
 	def __init__(self, poolSize=10, delay=2, allowAll=False, **kwargs):
 		# Call the parent constructor
 		BaseFetcher.__init__(self, poolSize)
-		self.pldQueue = qr.Queue('plds')
+		# Include a priority queue of plds
+		self.pldQueue = qr.PriorityQueue('plds', **kwargs)
+		# Make sure that there is an entry in the plds for
+		# each domain waiting to be fetched
+		r = redis.Redis(**kwargs)
+		for key in r.keys('domain:*'):
+			self.pldQueue.push(key, 0)
 		self.requests = qr.Queue('request', **kwargs)
 		self.delay = float(delay)
 		self.timer = None
@@ -67,9 +74,7 @@ class PoliteFetcher(BaseFetcher):
 	# Event callbacks
 	def onDone(self, request):
 		# Use the robots.txt delay, defaulting to our own
-		key = self.getKey(request)
-		delay = time.time() + self.crawlDelay(request)
-		self.pldQueue.push((delay, key))
+		self.pldQueue.push(self.getKey(request), time.time() + self.crawlDelay(request))
 	
 	#################
 	# Insertion to our queue
@@ -95,7 +100,7 @@ class PoliteFetcher(BaseFetcher):
 			key = self.getKey(request)
 			q = qr.Queue(key)
 			if not len(q):
-				self.pldQueue.push((time.time(), key))
+				self.pldQueue.push(key, time.time())
 			q.push(request)
 			self.remaining += 1
 			return 1
@@ -110,15 +115,15 @@ class PoliteFetcher(BaseFetcher):
 		now = time.time()
 		while True:
 			# Get the next plds we might want to fetch from
-			next = self.pldQueue.peek()
+			next, when = self.pldQueue.peek(withscores=True)
 			if not next:
 				return None
 			# If the next-fetchable is not soon enough, then wait
-			if next[0] > now:
+			if when > now:
 				# If we weren't waiting, then wait
 				if self.timer == None:
-					logger.debug('Waiting %f seconds' % (next[0] - now))
-					self.timer = reactor.callLater(next[0] - now, self.serveNext)
+					logger.debug('Waiting %f seconds' % (when - now))
+					self.timer = reactor.callLater(when - now, self.serveNext)
 				return None
 			else:
 				# Go ahead and pop this item
@@ -126,13 +131,13 @@ class PoliteFetcher(BaseFetcher):
 				# Unset the timer
 				self.timer = None
 				try:
-					v = qr.Queue(next[1]).pop()
+					v = qr.Queue(next).pop()
 					if not v:
 						continue
 					return v
 				except ValueError:
 					# This should never happen
-					logger.error('Tried to pop from non-existent pld: %s' % next[1])
+					logger.error('Tried to pop from non-existent pld: %s' % next)
 					return None
 		return None
 		
