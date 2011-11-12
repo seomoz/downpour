@@ -47,6 +47,7 @@ import os
 import re
 import urlparse
 import threading
+import cPickle as pickle
 from twisted.python import log
 from twisted.web import client, error
 from twisted.internet import reactor, ssl
@@ -180,6 +181,15 @@ class BaseRequest(object):
 		this particular resource, then you can cancel it'''
 		self.factory.cancel(reason)
 	
+	def __getstate__(self):
+		'''This is a section of code of which I am not terribly proud.
+		Unfortunately, it's necessary for the time being.'''
+		try:
+			del self.factory
+		except:
+			pass
+		return self.__dict__
+	
 	# Inheritable callbacks. You don't need to worry about
 	# returning anything. Just go ahead and do what you need
 	# to do with the input!
@@ -206,7 +216,7 @@ class BaseRequest(object):
 		pass
 	
 	# Finished
-	def done(self, response, fetcher):
+	def _done(self, response, fetcher):
 		try:
 			self.onDone(response, fetcher)
 			del self.factory
@@ -215,7 +225,7 @@ class BaseRequest(object):
 		return self
 
 	# Made contact
-	def success(self, response, fetcher):
+	def _success(self, response, fetcher):
 		try:
 			logger.info('Successfully fetched %s' % self.url)
 			self.onSuccess(response, fetcher)
@@ -224,7 +234,7 @@ class BaseRequest(object):
 		return self
 
 	# Failed to made contact
-	def error(self, failure, fetcher):
+	def _error(self, failure, fetcher):
 		try:
 			try:
 				failure.raiseException()
@@ -321,7 +331,7 @@ class BaseFetcher(object):
 	# are excuted in association with these functions: `onSuccess`, `onDone`
 	# and `onError`. Exceptions thrown in those functions do not affect the
 	# performance of the internal logic in these methods.
-	def done(self, request):
+	def _done(self, request):
 		'''A request has completed'''
 		try:
 			with self.lock:
@@ -340,14 +350,14 @@ class BaseFetcher(object):
 				return
 			self.serveNext()
 	
-	def success(self, request):
+	def _success(self, request):
 		'''A request has completed successfully.'''
 		try:
 			self.onSuccess(request)
 		except Exception as e:
 			logger.exception('BaseFetcher:onSuccess failed.')
 	
-	def error(self, failure):
+	def _error(self, failure):
 		'''A request resulted in this failure'''
 		try:
 			self.onError(failure.value)
@@ -390,9 +400,9 @@ class BaseFetcher(object):
 						reactor.connectSSL(host, port, factory, contextFactory)
 					else:
 						reactor.connectTCP(host, port, factory)
-					factory.deferred.addCallback(r.success, self).addCallback(self.success)
-					factory.deferred.addErrback(r.error, self).addErrback(self.error).addErrback(log.err)
-					factory.deferred.addBoth(r.done, self).addBoth(self.done)
+					factory.deferred.addCallback(r._success, self).addCallback(self._success)
+					factory.deferred.addErrback(r._error, self).addErrback(self._error).addErrback(log.err)
+					factory.deferred.addBoth(r._done, self).addBoth(self._done)
 				except:
 					self.numFlight -= 1
 					logger.exception('Unable to request %s' % r.url)
