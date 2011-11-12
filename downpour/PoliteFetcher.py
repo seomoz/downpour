@@ -32,18 +32,34 @@ import redis
 import urlparse
 
 class PoliteFetcher(BaseFetcher):
-	def __init__(self, poolSize=10, delay=2, allowAll=False, **kwargs):
+	def __init__(self, poolSize=10, agent=None, stopWhenDone=False, 
+		delay=2, allowAll=False, **kwargs):
+		
 		# Call the parent constructor
-		BaseFetcher.__init__(self, poolSize)
+		BaseFetcher.__init__(self, poolSize, agent, stopWhenDone)
 		# Include a priority queue of plds
 		self.pldQueue = qr.PriorityQueue('plds', **kwargs)
 		# Make sure that there is an entry in the plds for
-		# each domain waiting to be fetched
+		# each domain waiting to be fetched. Also, include
+		# the number of urls from each domain in the count
+		# of remaining urls to be fetched.
 		r = redis.Redis(**kwargs)
-		for key in r.keys('domain:*'):
-			self.pldQueue.push(key, 0)
+		# Redis has a pipeline feature that allows for bulk
+		# requests, the result of which is a list of the 
+		# result of each individual request. Thus, only get
+		# the length of each of the queues in the pipeline
+		# as we're just going to set remaining to the sum
+		# of the lengths of each of the domain queues.
+		with r.pipeline() as p:
+			for key in r.keys('domain:*'):
+				self.pldQueue.push(key, 0)
+				p.llen(key)
+			self.remaining = sum(p.execute())
+		# Now make a queue for incoming requests
 		self.requests = qr.Queue('request', **kwargs)
 		self.delay = float(delay)
+		# This is used when we have to impose a delay before
+		# servicing the next available request.
 		self.timer = None
 		# This is a way to ignore the allow/disallow directives
 		# For example, if you're checking for allow in other places
@@ -51,6 +67,7 @@ class PoliteFetcher(BaseFetcher):
 		self.userAgentString = reppy.getUserAgentString(self.agent)
 	
 	def __len__(self):
+		''''''
 		return len(self.pldQueue) + len(self.requests)
 	
 	def getKey(self, req):
