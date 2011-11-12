@@ -219,7 +219,10 @@ class BaseRequest(object):
 	def _done(self, response, fetcher):
 		try:
 			self.onDone(response, fetcher)
-			del self.factory
+			try:
+				del self.factory
+			except AttributeError:
+				pass
 		except Exception as e:
 			logger.exception('Request done handler failed')
 		return self
