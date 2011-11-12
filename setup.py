@@ -24,12 +24,12 @@
 try:
 	from setuptools import setup
 	extra = {
-		'install_requires' : ['reppy', 'qr', 'twisted', 'python-dateutil']
+		'install_requires' : ['reppy', 'qr', 'twisted']
 	}
 except ImportError:
 	from distutils.core import setup
 	extra = {
-		'dependencies' : ['reppy', 'qr', 'twisted', 'python-dateutil']
+		'dependencies' : ['reppy', 'qr', 'twisted']
 	}
 
 setup(name       = 'downpour',
