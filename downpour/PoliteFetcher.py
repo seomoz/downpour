@@ -127,8 +127,6 @@ class PoliteFetcher(BaseFetcher):
 		
 	def pop(self):
 		'''Get the next request'''
-		if len(self.pldQueue) < self.poolSize:
-			self.grow()
 		now = time.time()
 		while True:
 			# Get the next plds we might want to fetch from
