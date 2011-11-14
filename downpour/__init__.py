@@ -382,7 +382,9 @@ class BaseFetcher(object):
 						return
 					else:
 						logger.debug('Grew queue...')
-						continue
+						r = self.pop()
+						if r == None:
+							return
 				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
 				try:
