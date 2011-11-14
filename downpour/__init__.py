@@ -106,6 +106,8 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		variables, and so if present, it will override the 
 		default action, but the redirected url will still appear
 		as the argument to the request callback.'''
+		# Especially on redirects, the url can lack a domain name
+		url = urlparse.urljoin(self.request.url, url)
 		try:
 			self.request.onURL(url)
 		except:
