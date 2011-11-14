@@ -91,7 +91,7 @@ class PoliteFetcher(BaseFetcher):
 	# Event callbacks
 	def onDone(self, request):
 		# Use the robots.txt delay, defaulting to our own
-		self.pldQueue.push(self.getKey(request), time.time() + self.crawlDelay(request))
+		self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
 	
 	#################
 	# Insertion to our queue
@@ -146,15 +146,20 @@ class PoliteFetcher(BaseFetcher):
 				next = self.pldQueue.pop()
 				# Unset the timer
 				self.timer = None
-				try:
-					v = qr.Queue(next).pop()
-					if not v:
-						continue
-					return v
-				except ValueError:
-					# This should never happen
-					logger.error('Tried to pop from non-existent pld: %s' % next)
-					return None
+				v = qr.Queue(next).pop()
+				if not v:
+					continue
+				# This was the source of a rather difficult-to-track bug
+				# wherein the pld queue would slowly drain, despite there
+				# being plenty of logical queues to draw from. The problem
+				# was introduced by calling urlparse.urljoin when invoking
+				# the request's onURL method. As a result, certain redirects
+				# were making changes to the url, saving it as an updated
+				# value, but we'd then try to pop off the queue for the new
+				# hostname, when in reality, we should pop off the queue 
+				# for the original hostname.
+				v._originalKey = next
+				return v
 		return None
 		
 if __name__ == '__main__':
