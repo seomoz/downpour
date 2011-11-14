@@ -383,7 +383,6 @@ class BaseFetcher(object):
 					if not self.grow(self.poolSize):
 						return
 					else:
-						logger.debug('Grew queue...')
 						r = self.pop()
 						if r == None:
 							return

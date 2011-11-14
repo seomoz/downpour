@@ -110,6 +110,7 @@ class PoliteFetcher(BaseFetcher):
 		while r and count < upto:
 			count += self.push(r) or 0
 			r = self.requests.pop()
+		logger.debug('Grew by %i' % count)
 		return count
 	
 	def push(self, request):
