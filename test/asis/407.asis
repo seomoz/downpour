@@ -1,0 +1,5 @@
+HTTP/1.1 407 Proxy Authentication Required
+Content-Type: text/html
+Content-Length: 29
+
+Proxy Authentication Required

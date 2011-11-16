@@ -1,0 +1,5 @@
+HTTP/1.1 406 Not Acceptable
+Content-Type: text/html
+Content-Length: 14
+
+Not Acceptable

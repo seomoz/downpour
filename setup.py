@@ -41,7 +41,7 @@ setup(name       = 'downpour',
 	author_email = 'dan@seomoz.org',
 	keywords     = 'Twisted, fetching, url, download, asynchronous',
 	license      = 'MIT',
-	packages     = ['downpour'],
+	packages     = ['downpour', 'downpour.test'],
 	classifiers  = [
 		'License :: OSI Approved :: MIT License',
 		'Programming Language :: Python',

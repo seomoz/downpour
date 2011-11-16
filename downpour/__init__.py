@@ -48,8 +48,9 @@ import re
 import urlparse
 import threading
 import cPickle as pickle
+from twisted import internet
 from twisted.python import log
-from twisted.web import client, error
+from twisted.web import http, client, error
 from twisted.internet import reactor, ssl
 from twisted.python.failure import Failure
 
@@ -87,7 +88,7 @@ class UserPreemptionError(error.Error):
 	
 	def __str__(self):
 		return '%s => %s' % (self.code, str(self.reason))
-
+	
 class BaseRequestServicer(client.HTTPClientFactory):
 	'''This class services requests, providing the request with
 	additional callbacks beyond those typically provided. For 
@@ -166,7 +167,7 @@ class BaseRequest(object):
 	
 	def __init__(self, url, data=None):
 		self.url = self.urlRE.sub('', url)
-		self.data = None
+		self.data = data
 	
 	def __del__(self):
 		# For a brief while, I was having problems with memory leaks, and so 
@@ -214,7 +215,7 @@ class BaseRequest(object):
 	
 	def onURL(self, url):
 		if self.url != url:
-			logger.error('%s set => %s' % (self.url, url))
+			logger.debug('%s set => %s' % (self.url, url))
 		pass
 	
 	# Finished

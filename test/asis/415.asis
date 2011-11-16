@@ -1,0 +1,5 @@
+HTTP/1.1 415 Unsupported Media Type
+Content-Type: text/html
+Content-Length: 22
+
+Unsupported Media Type
