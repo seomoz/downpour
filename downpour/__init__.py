@@ -45,6 +45,7 @@ except ImportError:
 
 import os
 import re
+import reppy
 import urlparse
 import threading
 import cPickle as pickle
@@ -250,6 +251,24 @@ class BaseRequest(object):
 		except Exception as e:
 			logger.exception('Request error handler failed')
 		return Failure(self)
+
+class RobotsRequest(BaseRequest):
+	def __init__(self, url):
+		BaseRequest.__init__(self, url)
+		self.status = 200
+		self.ttl    = 3600 * 3
+	
+	def onStatus(self, version, status, message):
+		self.status = int(status)
+		if self.status == 401 or self.status == 403:
+			# This means we're forbidden
+			reppy.parse('''User-agent: *\nDisallow: /''', url=self.url, autorefresh=False)
+		elif self.status != 200:
+			# This means we're going to act like there wasn't one
+			reppy.parse('', url=self.url)
+	
+	def onSuccess(self, text, fetcher):
+		reppy.parse(text, url=self.url)
 
 class BaseFetcher(object):
 	def __init__(self, poolSize=10, agent=None, stopWhenDone=False):

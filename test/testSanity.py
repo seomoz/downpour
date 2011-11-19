@@ -12,7 +12,7 @@ logger.setLevel(logging.CRITICAL)
 fetcher = BaseFetcher(stopWhenDone=True)
 
 # Try a plain-and-simple request
-fetcher.push(ExpectRequest('200 Test', 'asis/ok.asis',
+fetcher.push(ExpectRequest('200 Test', host + 'asis/ok.asis',
 	expectHeaders = {
 	'content-type': ['text/html'],
 	'content-length': ['11']
@@ -22,12 +22,12 @@ fetcher.push(ExpectRequest('200 Test', 'asis/ok.asis',
 
 # Try a redirect request, making sure we get
 # every url we expect to get.
-fetcher.push(ExpectRequest('301 Redirect Test', 'asis/301_to_ok.asis', expectURL = [
+fetcher.push(ExpectRequest('301 Redirect Test', host + 'asis/301_to_ok.asis', expectURL = [
 	host + 'asis/301_to_ok.asis',
 	host + 'asis/ok.asis'
 ]))
 
-fetcher.push(ExpectRequest('302 Redirect Test', 'asis/302_to_ok.asis', expectURL = [
+fetcher.push(ExpectRequest('302 Redirect Test', host + 'asis/302_to_ok.asis', expectURL = [
 	host + 'asis/302_to_ok.asis',
 	host + 'asis/ok.asis'
 ]))
@@ -61,7 +61,7 @@ bad = [
 ]
 
 for b in bad:
-	fetcher.push(ExpectRequest('%s Failure Test' % b[1], 'asis/%s.asis' % b[1],
+	fetcher.push(ExpectRequest('%s Failure Test' % b[1], host + 'asis/%s.asis' % b[1],
 		expectHeaders = True,
 		expectURL     = True,
 		expectStatus  = b,
@@ -72,7 +72,7 @@ class FollowRequest(BaseRequest):
 	def onURL(self, url):
 		self.url = url
 
-fetcher.push(ExamineRequest('200 Examine Request', FollowRequest('asis/ok.asis'),
+fetcher.push(ExamineRequest('200 Examine Request', FollowRequest(host + 'asis/ok.asis'),
 	lambda request: request.url == (host + 'asis/ok.asis')))
 
 run(fetcher)

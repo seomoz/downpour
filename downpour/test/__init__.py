@@ -14,6 +14,7 @@ import os
 import time
 import urlparse
 import unittest
+from downpour import logger
 from downpour import reactor
 from downpour import BaseRequest
 from downpour import BaseFetcher
@@ -94,7 +95,6 @@ class ExamineRequest(UnittestRequest):
 		self.examine = examine
 		# If it was just a filename, go ahead and append it to
 		# the EchoServer's host. Otherwise, use the url
-		self.request.url = urlparse.urljoin(host, request.url)
 		UnittestRequest.__init__(self, name, request.url, request.data)
 	
 	def onHeaders(self, *args, **kwargs):
@@ -113,17 +113,19 @@ class ExamineRequest(UnittestRequest):
 		self.request.onError(*args, **kwargs)
 	
 	def onDone(self, *args, **kwargs):
+		logger.debug('onDone')
 		self.request.onDone(*args, **kwargs)
+		logger.debug('request onDone complete')
 		# Alright, now that all the callbacks have been invoked,
 		# we should invoke the examine command to ensure that 
 		# this object is in the state we'd expect it to be in.
-		self.assertTrue(self.examine(self))
+		self.assertTrue(self.examine(self.request))
 		UnittestRequest.onDone(self, *args, **kwargs)
 
 class ExpectRequest(UnittestRequest):
 	'''This hits the echo server's as-is endpoint, which responds
 	with the text provided in post.'''
-	def __init__(self, name, fname, data = None,
+	def __init__(self, name, url, data = None,
 		expectHeaders = None,
 		expectStatus  = None,
 		expectURL     = None,
@@ -131,7 +133,7 @@ class ExpectRequest(UnittestRequest):
 		expectError   = None,
 		expectDone    = None):
 		
-		UnittestRequest.__init__(self, name, urlparse.urljoin(host, fname), data)
+		UnittestRequest.__init__(self, name, url, data)
 		self.expectHeaders = expectHeaders
 		self.expectStatus  = expectStatus
 		self.expectURL     = expectURL

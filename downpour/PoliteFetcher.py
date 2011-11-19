@@ -114,18 +114,14 @@ class PoliteFetcher(BaseFetcher):
 		return count
 	
 	def push(self, request):
-		if self.allowed(request.url):
-			key = self.getKey(request)
-			q = qr.Queue(key)
-			if not len(q):
-				self.pldQueue.push(key, time.time())
-			q.push(request)
-			self.remaining += 1
-			return 1
-		else:
-			logger.debug('Request %s blocked by robots.txt' % request.url)
-			return 0
-		
+		key = self.getKey(request)
+		q = qr.Queue(key)
+		if not len(q):
+			self.pldQueue.push(key, time.time())
+		q.push(request)
+		self.remaining += 1
+		return 1
+	
 	def pop(self):
 		'''Get the next request'''
 		now = time.time()
@@ -146,20 +142,30 @@ class PoliteFetcher(BaseFetcher):
 				next = self.pldQueue.pop()
 				# Unset the timer
 				self.timer = None
-				v = qr.Queue(next).pop()
-				if not v:
+				q = qr.Queue(next)
+				
+				if len(q):
+					# If the robots for this particular request is not fetched
+					# or it's expired, then we'll have to make a request for it,
+					# and push this request back onto the list
+					robot = reppy.findRobot(v)
+					if self.allowAll and (not robot or robot.expired):
+						return RobotsRequest('http://' + v + '/robots.txt')
+					else:
+						v = q.pop()
+						# This was the source of a rather difficult-to-track bug
+						# wherein the pld queue would slowly drain, despite there
+						# being plenty of logical queues to draw from. The problem
+						# was introduced by calling urlparse.urljoin when invoking
+						# the request's onURL method. As a result, certain redirects
+						# were making changes to the url, saving it as an updated
+						# value, but we'd then try to pop off the queue for the new
+						# hostname, when in reality, we should pop off the queue 
+						# for the original hostname.
+						v._originalKey = next
+						return v
+				else:
 					continue
-				# This was the source of a rather difficult-to-track bug
-				# wherein the pld queue would slowly drain, despite there
-				# being plenty of logical queues to draw from. The problem
-				# was introduced by calling urlparse.urljoin when invoking
-				# the request's onURL method. As a result, certain redirects
-				# were making changes to the url, saving it as an updated
-				# value, but we'd then try to pop off the queue for the new
-				# hostname, when in reality, we should pop off the queue 
-				# for the original hostname.
-				v._originalKey = next
-				return v
 		return None
 		
 if __name__ == '__main__':
