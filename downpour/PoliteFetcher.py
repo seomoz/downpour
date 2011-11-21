@@ -148,7 +148,7 @@ class PoliteFetcher(BaseFetcher):
 					# If the robots for this particular request is not fetched
 					# or it's expired, then we'll have to make a request for it,
 					# and push this request back onto the list
-					robot = reppy.findRobot(v)
+					robot = reppy.findRobot(next)
 					if self.allowAll and (not robot or robot.expired):
 						return RobotsRequest('http://' + v + '/robots.txt')
 					else:
