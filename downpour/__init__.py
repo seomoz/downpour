@@ -78,17 +78,16 @@ observer = log.PythonLoggingObserver()
 observer.start()
 
 class UserPreemptionError(error.Error):
-	'''The exception raised when a `Request.cancel` is called'''
-	def __init__(self, code, reason):
-		error.Error(self, code, reason)
+	'''The exception raised when a user cancels a request'''
+	def __init__(self, reason):
+		error.Error(self, reason)
 		self.reason = reason
-		self.code = code
 	
 	def __repr__(self):
-		return '%s => %s' % (self.code, repr(self.reason))
+		return 'UserPreemptionError for %s' % repr(self.reason)
 	
 	def __str__(self):
-		return '%s => %s' % (self.code, str(self.reason))
+		return repr(self)
 	
 class BaseRequestServicer(client.HTTPClientFactory):
 	'''This class services requests, providing the request with
@@ -99,7 +98,6 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		'''Provide the request to service, and the user agent to identify with.'''
 		self.request = request
 		self.request.cached = True
-		self.request.factory = self
 		client.HTTPClientFactory.__init__(self, url=request.url, agent=agent, timeout=request.timeout, redirectLimit=request.redirectLimit, postdata=self.request.data)
 	
 	def setURL(self, url):
@@ -112,6 +110,8 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		url = urlparse.urljoin(self.request.url, url)
 		try:
 			self.request.onURL(url)
+		except UserPreemptionError as e:
+			self.cancel(e)
 		except:
 			logger.exception('%s onURL failed' % self.request.url)
 		scheme, host, port, path = client._parse(url)
@@ -135,6 +135,8 @@ class BaseRequestServicer(client.HTTPClientFactory):
 			# of the cache specified, and it was a hit.
 			cached = self.proxy and ('HIT from %s' % self.host) in ';'.join(headers.get('x-cache', ''))
 			self.request.cached = self.request.cached and cached
+		except UserPreemptionError as e:
+			self.cancel(e)
 		except:
 			logger.exception('%s onHeaders failed' % self.request.url)
 		client.HTTPClientFactory.gotHeaders(self, headers)
@@ -143,6 +145,8 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		'''Received the HTTP version, status and status message.'''
 		try:
 			self.request.onStatus(version, status, message)
+		except UserPreemptionError as e:
+			self.cancel(e)
 		except:
 			logger.exception('%s onStatus failed' % self.request.url)
 		client.HTTPClientFactory.gotStatus(self, version, status, message)
@@ -153,10 +157,9 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		self.p = client.HTTPClientFactory.buildProtocol(self, *args, **kwargs)
 		return self.p
 	
-	def cancel(self, reason):
+	def cancel(self, err):
 		'''If the user needs to preempt the transfer. For example, if looking
 		at the content headers, we decide we don't want to get the file.'''
-		err = UserPreemptionError(self.status, reason)
 		self.noPage(Failure(err))
 		self.p.quietLoss = True
 		self.p.transport.loseConnection()
@@ -183,16 +186,7 @@ class BaseRequest(object):
 	def cancel(self, reason):
 		'''If for any reason, you discover you don't want to fetch
 		this particular resource, then you can cancel it'''
-		self.factory.cancel(reason)
-	
-	def __getstate__(self):
-		'''This is a section of code of which I am not terribly proud.
-		Unfortunately, it's necessary for the time being.'''
-		try:
-			del self.factory
-		except:
-			pass
-		return self.__dict__
+		raise UserPreemptionError(reason)
 	
 	# Inheritable callbacks. You don't need to worry about
 	# returning anything. Just go ahead and do what you need
@@ -223,10 +217,6 @@ class BaseRequest(object):
 	def _done(self, response, fetcher):
 		try:
 			self.onDone(response, fetcher)
-			try:
-				del self.factory
-			except AttributeError:
-				pass
 		except Exception as e:
 			logger.exception('Request done handler failed')
 		return self
