@@ -23,7 +23,7 @@
 
 '''Politely (per pay-level-domain) fetch urls'''
 
-from downpour import BaseFetcher, logger, reactor
+from downpour import BaseFetcher, RobotsRequest, logger, reactor
 
 import qr
 import time
@@ -77,6 +77,7 @@ class PoliteFetcher(BaseFetcher):
 	
 	def allowed(self, url):
 		'''Are we allowed to fetch this url/urls?'''
+		logger.warn('Allowed? %s' % url)
 		return self.allowAll or reppy.allowed(url, self.agent, self.userAgentString)
 	
 	def crawlDelay(self, request):
@@ -148,9 +149,12 @@ class PoliteFetcher(BaseFetcher):
 					# If the robots for this particular request is not fetched
 					# or it's expired, then we'll have to make a request for it,
 					# and push this request back onto the list
-					robot = reppy.findRobot(next)
-					if self.allowAll and (not robot or robot.expired):
-						return RobotsRequest('http://' + v + '/robots.txt')
+					key, sep, domain = next.partition(':')
+					robot = reppy.findRobot('http://' + domain)
+					if not self.allowAll and (not robot or robot.expired):
+						r = RobotsRequest('http://' + domain + '/robots.txt')
+						r._originalKey = next
+						return r
 					else:
 						v = q.pop()
 						# This was the source of a rather difficult-to-track bug
