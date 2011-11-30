@@ -153,7 +153,7 @@ class PoliteFetcher(BaseFetcher):
 					# If the robots for this particular request is not fetched
 					# or it's expired, then we'll have to make a request for it
 					v = q.peek()
-					domain = urlparse.urlparse(v.url).hostname()
+					domain = urlparse.urlparse(v.url).hostname
 					robot = reppy.findRobot('http://' + domain)
 					if not self.allowAll and (not robot or robot.expired):
 						r = RobotsRequest('http://' + domain + '/robots.txt')
