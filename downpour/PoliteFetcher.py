@@ -177,8 +177,7 @@ class PoliteFetcher(BaseFetcher):
 						self.onEmptyQueue(next)
 					except Exception:
 						logger.exception('onEmptyQueue failed for %s' % next)
-					finally:
-						continue
+					continue
 		return None
 		
 if __name__ == '__main__':
