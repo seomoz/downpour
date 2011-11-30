@@ -94,6 +94,10 @@ class PoliteFetcher(BaseFetcher):
 		# Use the robots.txt delay, defaulting to our own
 		self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
 	
+	# When we try to pop off an empty queue
+	def onEmptyQueue(self, key):
+		pass
+	
 	#################
 	# Insertion to our queue
 	#################
@@ -105,7 +109,7 @@ class PoliteFetcher(BaseFetcher):
 		return count
 	
 	def grow(self, upto=10000):
-		count = 0
+		count = BaseFetcher.grow(self, upto)
 		t = time.time()
 		r = self.requests.pop()
 		while r and count < upto:
@@ -147,9 +151,9 @@ class PoliteFetcher(BaseFetcher):
 				
 				if len(q):
 					# If the robots for this particular request is not fetched
-					# or it's expired, then we'll have to make a request for it,
-					# and push this request back onto the list
-					key, sep, domain = next.partition(':')
+					# or it's expired, then we'll have to make a request for it
+					v = q.peek()
+					domain = urlparse.urlparse(v.url).hostname()
 					robot = reppy.findRobot('http://' + domain)
 					if not self.allowAll and (not robot or robot.expired):
 						r = RobotsRequest('http://' + domain + '/robots.txt')
@@ -169,7 +173,12 @@ class PoliteFetcher(BaseFetcher):
 						v._originalKey = next
 						return v
 				else:
-					continue
+					try:
+						self.onEmptyQueue(next)
+					except Exception:
+						logger.exception('onEmptyQueue failed for %s' % next)
+					finally:
+						continue
 		return None
 		
 if __name__ == '__main__':

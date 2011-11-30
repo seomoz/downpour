@@ -284,6 +284,8 @@ class BaseFetcher(object):
 		# Use this user agent when making requests
 		self.agent = agent or 'rogerbot/1.0'
 		self.stopWhenDone = stopWhenDone
+		# The object that represents our repeated call to grow
+		self.growLater = reactor.callLater(20.0, self.grow, self.poolSize)
 	
 	# This is how subclasses communicate how many requests they have 
 	# left to fulfill. 
@@ -319,6 +321,7 @@ class BaseFetcher(object):
 	# self.remaining updated. As such, it's recommended to internally make
 	# calls to `extend` or `push` for that purpose
 	def grow(self, count):
+		self.growLater = reactor.callLater(20.0, self.grow, self.poolSize)
 		return 0
 	
 	# These can be overridden to do various post-processing. For example, 
@@ -394,7 +397,7 @@ class BaseFetcher(object):
 				if r == None:
 					# If nothing was fetchable, then try to grow the number
 					# of requests to service.
-					if not self.grow(self.poolSize):
+					if not self.grow(self.poolSize - self.numFlight):
 						return
 					else:
 						r = self.pop()
