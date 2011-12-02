@@ -54,7 +54,7 @@ class EchoServer(server.Site):
 		# Make a root resource, and add children to it for
 		# each of the types of requests we plan to service
 		root = static.File(os.path.abspath(path))
-		root.indexNames = ['index.html', 'index.txt']
+		root.indexNames = ['index.html', 'index.txt', 'index.asis']
 		root.processors = {
 			'.asis' : CleanASIS
 		}

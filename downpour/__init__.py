@@ -321,7 +321,10 @@ class BaseFetcher(object):
 	# self.remaining updated. As such, it's recommended to internally make
 	# calls to `extend` or `push` for that purpose
 	def grow(self, count):
-		self.growLater = reactor.callLater(20.0, self.grow, self.poolSize)
+		try:
+			self.growLater.delay(20.0)
+		except:
+			self.growLater = reactor.callLater(20.0, self.grow, self.poolSize)
 		return 0
 	
 	# These can be overridden to do various post-processing. For example, 
