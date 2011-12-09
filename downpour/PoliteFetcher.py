@@ -82,12 +82,12 @@ class PoliteFetcher(BaseFetcher):
 	
 	def crawlDelay(self, request):
 		'''How long to wait before getting the next page from this domain?'''
-		# Until I can find a way to make this all asynchronous, going to have to omit it
-		#return reppy.crawlDelay(url, self.agent, self.userAgentString) or self.delay
 		# No delay for requests that were serviced from cache
 		if request.cached:
 			return 0
-		return self.delay
+		# Return the crawl delay for this particular url if there is one
+		return (self.allowAll and self.delay) or reppy.crawlDelay(url, self.agent) or self.delay
+		# return self.delay
 	
 	# Event callbacks
 	def onDone(self, request):
