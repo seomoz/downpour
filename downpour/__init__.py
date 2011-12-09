@@ -321,10 +321,20 @@ class BaseFetcher(object):
 	# self.remaining updated. As such, it's recommended to internally make
 	# calls to `extend` or `push` for that purpose
 	def grow(self, count):
+		self.grew(0)
+	
+	# This is how you let the fetcher know that you've grown by a certain
+	# amount.
+	def grew(self, count):
 		try:
+			# This is when growLater did /not/ fire.
 			self.growLater.delay(20.0)
 		except:
+			# This is when grow got called because of the timer
 			self.growLater = reactor.callLater(20.0, self.grow, self.poolSize)
+			if count:
+				# If there was a request serviced, then we should call it
+				self.serveNext()
 		return 0
 	
 	# These can be overridden to do various post-processing. For example, 
@@ -400,12 +410,7 @@ class BaseFetcher(object):
 				if r == None:
 					# If nothing was fetchable, then try to grow the number
 					# of requests to service.
-					if not self.grow(self.poolSize - self.numFlight):
-						return
-					else:
-						r = self.pop()
-						if r == None:
-							return
+					return self.grow(self.poolSize - self.numFlight):
 				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
 				try:

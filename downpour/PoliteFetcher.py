@@ -109,14 +109,14 @@ class PoliteFetcher(BaseFetcher):
 		return count
 	
 	def grow(self, upto=10000):
-		count = BaseFetcher.grow(self, upto)
+		count = 0
 		t = time.time()
 		r = self.requests.pop()
 		while r and count < upto:
 			count += self.push(r) or 0
 			r = self.requests.pop()
 		logger.debug('Grew by %i' % count)
-		return count
+		return BaseFetcher.grew(self, count)
 	
 	def push(self, request):
 		key = self.getKey(request)
