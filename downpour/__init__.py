@@ -335,7 +335,7 @@ class BaseFetcher(object):
 			if count:
 				# If there was a request serviced, then we should call it
 				self.serveNext()
-		return 0
+		return count
 	
 	# These can be overridden to do various post-processing. For example, 
 	# you might want to add more requests, etc.
@@ -410,7 +410,12 @@ class BaseFetcher(object):
 				if r == None:
 					# If nothing was fetchable, then try to grow the number
 					# of requests to service.
-					return self.grow(self.poolSize - self.numFlight):
+					if not self.grow(self.poolSize - self.numFlight):
+						return
+					else:
+						r = self.pop()
+						if r == None:
+							return
 				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
 				try:
