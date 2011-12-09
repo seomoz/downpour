@@ -86,7 +86,7 @@ class PoliteFetcher(BaseFetcher):
 		if request.cached:
 			return 0
 		# Return the crawl delay for this particular url if there is one
-		return (self.allowAll and self.delay) or reppy.crawlDelay(url, self.agent) or self.delay
+		return (self.allowAll and self.delay) or reppy.crawlDelay(request.url, self.agent) or self.delay
 		# return self.delay
 	
 	# Event callbacks
