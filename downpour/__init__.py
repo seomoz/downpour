@@ -331,7 +331,7 @@ class BaseFetcher(object):
 			self.growLater.delay(20.0)
 		except:
 			# This is when grow got called because of the timer
-			self.growLater = reactor.callLater(20.0, self.grow, self.poolSize)
+			self.growLater = reactor.callLater(20.0, self.grow, self.poolSize - self.numFlight)
 		if count:
 			self.serveNext()
 		return count
@@ -407,9 +407,7 @@ class BaseFetcher(object):
 			while self.numFlight < self.poolSize:
 				r = self.pop()
 				if r == None:
-					# If nothing was fetchable, then try to grow the number
-					# of requests to service.
-					return self.callLater(0.0, self.grow, self.poolSize - self.numFlight)
+					return
 				logger.debug('Requesting %s' % r.url)
 				self.numFlight += 1
 				try:
