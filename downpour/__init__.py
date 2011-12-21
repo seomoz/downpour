@@ -45,6 +45,7 @@ except ImportError:
 
 import os
 import re
+import time
 import reppy
 import urlparse
 import threading
@@ -98,6 +99,7 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		'''Provide the request to service, and the user agent to identify with.'''
 		self.request = request
 		self.request.cached = True
+		self.request.time   = -time.time()
 		client.HTTPClientFactory.__init__(self, url=request.url, agent=agent, timeout=request.timeout, redirectLimit=request.redirectLimit, postdata=self.request.data)
 	
 	def setURL(self, url):
@@ -165,7 +167,8 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		self.p.transport.loseConnection()
 
 class BaseRequest(object):
-	timeout = 45
+	time          = 0
+	timeout       = 45
 	redirectLimit = 10
 	
 	def __init__(self, url, data=None):
@@ -208,6 +211,7 @@ class BaseRequest(object):
 		pass
 	
 	def onURL(self, url):
+		self.time = -time.time()
 		if self.url != url:
 			logger.debug('%s set => %s' % (self.url, url))
 		pass
@@ -223,7 +227,8 @@ class BaseRequest(object):
 	# Made contact
 	def _success(self, response, fetcher):
 		try:
-			logger.info('Successfully fetched %s' % self.url)
+			self.time += time.time()
+			logger.info('Successfully fetched %s in %fs' % (self.url, self.time))
 			self.onSuccess(response, fetcher)
 		except Exception as e:
 			logger.exception('Request success handler failed')
@@ -232,10 +237,11 @@ class BaseRequest(object):
 	# Failed to made contact
 	def _error(self, failure, fetcher):
 		try:
+			self.time += time.time()
 			try:
 				failure.raiseException()
 			except:
-				logger.exception('Failed for %s' % self.url)
+				logger.exception('Failed for %s in %fs' % (self.url, self.time))
 			self.onError(failure, fetcher)
 		except Exception as e:
 			logger.exception('Request error handler failed')
