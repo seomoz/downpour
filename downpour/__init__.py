@@ -271,7 +271,7 @@ class RobotsRequest(BaseRequest):
 		reppy.parse('', url=self.url, autorefresh=False)
 
 class BaseFetcher(object):
-	def __init__(self, poolSize=10, agent=None, stopWhenDone=False):
+	def __init__(self, poolSize=10, agent=None, stopWhenDone=False, grow=5.0):
 		self.sslContext = ssl.ClientContextFactory()
 		# The base fetcher keeps track of requests as a list
 		self.requests = []
@@ -290,8 +290,9 @@ class BaseFetcher(object):
 		# Use this user agent when making requests
 		self.agent = agent or 'rogerbot/1.0'
 		self.stopWhenDone = stopWhenDone
+		self.period       = grow
 		# The object that represents our repeated call to grow
-		self.growLater = reactor.callLater(20.0, self.grow, self.poolSize)
+		self.growLater = reactor.callLater(self.period, self.grow, self.poolSize)
 	
 	# This is how subclasses communicate how many requests they have 
 	# left to fulfill. 
@@ -334,10 +335,10 @@ class BaseFetcher(object):
 	def grew(self, count):
 		try:
 			# This is when growLater did /not/ fire.
-			self.growLater.delay(20.0)
+			self.growLater.delay(self.period)
 		except:
 			# This is when grow got called because of the timer
-			self.growLater = reactor.callLater(20.0, self.grow, self.poolSize - self.numFlight)
+			self.growLater = reactor.callLater(self.period, self.grow, self.poolSize - self.numFlight)
 		if count:
 			self.serveNext()
 		return count
