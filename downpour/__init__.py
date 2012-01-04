@@ -117,7 +117,9 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		except:
 			logger.exception('%s onURL failed' % self.request.url)
 		scheme, host, port, path = client._parse(url)
-		self.proxy = os.environ.get('%s_proxy' % scheme)
+		self.proxy = os.environ.get('%s_proxy' % scheme) or self.request.proxy
+		# If a proxy is specified in the environment, or for this
+		# particular request, service it with that proxy
 		if self.proxy:
 			scheme, host, port, path = client._parse(self.proxy)
 			self.scheme = scheme
@@ -168,12 +170,15 @@ class BaseRequestServicer(client.HTTPClientFactory):
 
 class BaseRequest(object):
 	time          = 0
+	proxy         = None
 	timeout       = 45
 	redirectLimit = 10
 	
-	def __init__(self, url, data=None):
+	def __init__(self, url, data=None, proxy=None):
 		self.url, fragment = urlparse.urldefrag(url)
 		self.data = data
+		if proxy:
+			self.proxy = proxy
 	
 	def __del__(self):
 		# For a brief while, I was having problems with memory leaks, and so 
@@ -338,7 +343,8 @@ class BaseFetcher(object):
 			self.growLater.delay(self.period)
 		except:
 			# This is when grow got called because of the timer
-			self.growLater = reactor.callLater(self.period, self.grow, self.poolSize - self.numFlight)
+			with self.lock:
+				self.growLater = reactor.callLater(self.period, self.grow, self.poolSize - self.numFlight)
 		if count:
 			self.serveNext()
 		return count

@@ -93,6 +93,7 @@ class PoliteFetcher(BaseFetcher):
 	def onDone(self, request):
 		# Use the robots.txt delay, defaulting to our own
 		self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
+		logger.debug('Pushed %s onto pld queue' % request._originalKey)
 	
 	# When we try to pop off an empty queue
 	def onEmptyQueue(self, key):
