@@ -140,13 +140,16 @@ class PoliteFetcher(BaseFetcher):
 			if when > now:
 				# If we weren't waiting, then wait
 				if self.timer == None:
-					logger.debug('Waiting %f seconds' % (when - now))
+					logger.debug('Waiting %f seconds on %s' % (when - now, next))
 					self.timer = reactor.callLater(when - now, self.serveNext)
 				return None
 			else:
 				# Go ahead and pop this item
+				last = next
 				next = self.pldQueue.pop()
-				logger.debug('Popping off %s' % next)
+				logger.debug('Popping off %s, peeked %s' % (next, last))
+				if last != next:
+					logger.critical('The peeked queue and the popped queue are not the same!')
 				# Unset the timer
 				self.timer = None
 				q = qr.Queue(next)
