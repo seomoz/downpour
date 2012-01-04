@@ -146,21 +146,25 @@ class PoliteFetcher(BaseFetcher):
 			else:
 				# Go ahead and pop this item
 				next = self.pldQueue.pop()
+				logger.debug('Popping off %s' % next)
 				# Unset the timer
 				self.timer = None
 				q = qr.Queue(next)
 				
 				if len(q):
+					logger.debug('Key has a non-empty queue %s' % next)
 					# If the robots for this particular request is not fetched
 					# or it's expired, then we'll have to make a request for it
 					v = q.peek()
 					domain = urlparse.urlparse(v.url).netloc
 					robot = reppy.findRobot('http://' + domain)
 					if not self.allowAll and (not robot or robot.expired):
+						logger.debug('Making robots request for %s' % next)
 						r = RobotsRequest('http://' + domain + '/robots.txt')
 						r._originalKey = next
 						return r
 					else:
+						logger.debug('Popping next request from %s' % next)
 						v = q.pop()
 						# This was the source of a rather difficult-to-track bug
 						# wherein the pld queue would slowly drain, despite there
@@ -175,6 +179,7 @@ class PoliteFetcher(BaseFetcher):
 						return v
 				else:
 					try:
+						logger.debug('Calling onEmptyQueue for %s' % next)
 						self.onEmptyQueue(next)
 					except Exception:
 						logger.exception('onEmptyQueue failed for %s' % next)
