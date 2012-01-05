@@ -55,6 +55,11 @@ class PoliteFetcher(BaseFetcher):
 				self.pldQueue.push(key, 0)
 				p.llen(key)
 			self.remaining = sum(p.execute())
+		# For whatever reason, pushing key names back into the 
+		# priority queue has been problematic. As such, we'll
+		# set them aside as they fail, and then retry them at
+		# some point. Like when the next request finishes.
+		self.retries = []
 		# Now make a queue for incoming requests
 		self.requests = qr.Queue('request', **kwargs)
 		self.delay = float(delay)
@@ -91,14 +96,12 @@ class PoliteFetcher(BaseFetcher):
 	
 	# Event callbacks
 	def onDone(self, request):
-		# Retry this up to 5 times
-		for i in range(5):
-			if self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request)) == 1:
-				return
-			else:
-				logger.debug('Retrying to push onto priority queue')
-				time.sleep(0.05 * (2 ** i))
-		raise AssertionError('Unable to push %s onto pld queue' % request._originalKey)
+		# Append this next one onto the pld queue.
+		self.retries.append((request._originalKey, time.time() + self.crawlDelay(request)))
+		tostart = len(self.retries)
+		results = zip(self.retries, self.pldQueue.extend(self.retries))
+		self.retries = [(val, success) for val, success in results if (success != 1)]
+		logger.debug('Requeued %i / %i in the pldQueue' % (tostart - len(self.retries), tostart))
 	
 	# When we try to pop off an empty queue
 	def onEmptyQueue(self, key):
