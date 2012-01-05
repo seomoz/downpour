@@ -106,6 +106,7 @@ class PoliteFetcher(BaseFetcher):
 			results = zip(self.retries, self.pldQueue.extend(self.retries))
 			self.retries = [val for val, success in results if (success != 1)]
 			logger.debug('Requeued %i / %i in the pldQueue' % (tostart - len(self.retries), tostart))
+			logger.debug('Results : %s' % (repr(results)))
 	
 	# When we try to pop off an empty queue
 	def onEmptyQueue(self, key):
