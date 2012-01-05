@@ -100,7 +100,8 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		self.request = request
 		self.request.cached = True
 		self.request.time   = -time.time()
-		client.HTTPClientFactory.__init__(self, url=request.url, agent=agent, timeout=request.timeout, redirectLimit=request.redirectLimit, postdata=self.request.data)
+		client.HTTPClientFactory.__init__(self, url=request.url, agent=agent, timeout=request.timeout,
+			followRedirect=request.followRedirect, redirectLimit=request.redirectLimit, postdata=self.request.data)
 	
 	def setURL(self, url):
 		'''Called when redirection occurs, with the new url.
@@ -169,10 +170,11 @@ class BaseRequestServicer(client.HTTPClientFactory):
 		self.p.transport.loseConnection()
 
 class BaseRequest(object):
-	time          = 0
-	proxy         = None
-	timeout       = 45
-	redirectLimit = 10
+	time           = 0
+	proxy          = None
+	timeout        = 45
+	redirectLimit  = 10
+	followRedirect = 1
 	
 	def __init__(self, url, data=None, proxy=None):
 		self.url, fragment = urlparse.urldefrag(url)
