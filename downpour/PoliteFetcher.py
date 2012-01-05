@@ -91,9 +91,14 @@ class PoliteFetcher(BaseFetcher):
 	
 	# Event callbacks
 	def onDone(self, request):
-		# Use the robots.txt delay, defaulting to our own
-		assert self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request)) == 1
-		logger.debug('Pushed %s onto pld queue' % request._originalKey)
+		# Retry this up to 5 times
+		for i in range(5):
+			if self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request)) == 1:
+				return
+			else:
+				logger.debug('Retrying to push onto priority queue')
+				time.sleep(0.05 * (2 ** i))
+		raise AssertionError('Unable to push %s onto pld queue' % request._originalKey)
 	
 	# When we try to pop off an empty queue
 	def onEmptyQueue(self, key):
@@ -147,15 +152,11 @@ class PoliteFetcher(BaseFetcher):
 				# Go ahead and pop this item
 				last = next
 				next = self.pldQueue.pop()
-				logger.debug('Popping off %s, peeked %s' % (next, last))
-				if last != next:
-					logger.critical('The peeked queue and the popped queue are not the same!')
 				# Unset the timer
 				self.timer = None
 				q = qr.Queue(next)
 				
 				if len(q):
-					logger.debug('Key has a non-empty queue %s' % next)
 					# If the robots for this particular request is not fetched
 					# or it's expired, then we'll have to make a request for it
 					v = q.peek()
