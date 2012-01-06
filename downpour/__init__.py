@@ -79,12 +79,10 @@ observer = log.PythonLoggingObserver()
 observer.start()
 
 def parse(url):
-    parsed = urlparse.urlparse(url)
     try:
-        port = parsed.port
-    except ValueError:
-        port = None
-    return (parsed.scheme, parsed.hostname, port, parsed.path)
+        return client._parse(url)
+    except TypeError:
+        return client._parse(url.encode('utf-8'))
 
 class UserPreemptionError(error.Error):
     '''The exception raised when a user cancels a request'''
