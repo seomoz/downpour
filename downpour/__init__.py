@@ -190,6 +190,7 @@ class BaseRequest(object):
     
     def __init__(self, url, data=None, proxy=None):
         self.url, fragment = urlparse.urldefrag(url)
+        self.data = data
         if proxy:
             self.proxy = proxy
     
