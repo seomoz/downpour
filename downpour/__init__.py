@@ -135,7 +135,13 @@ class BaseRequestServicer(client.HTTPClientFactory):
             self.path = url
             self.url = url
         else:
-            client.HTTPClientFactory.setURL(self, url)
+            try:
+                client.HTTPClientFactory.setURL(self, url)
+            except TypeError:
+                # Twisted does not like to accept unicode strings. So, 
+                # if it decides to be stupid, then we'll try to encode the
+                # url as utf-8
+                client.HTTPClientFactory.setURL(self, url.encode('utf-8'))
         logger.debug('URL: %s' % self.url)
     
     def gotHeaders(self, headers):
