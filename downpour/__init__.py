@@ -78,6 +78,14 @@ logger.addHandler(handler)
 observer = log.PythonLoggingObserver()
 observer.start()
 
+def parse(url):
+    parsed = urlparse.urlparse(url)
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    return (parsed.scheme, parsed.hostname, port, parsed.path)
+
 class UserPreemptionError(error.Error):
     '''The exception raised when a user cancels a request'''
     def __init__(self, reason):
@@ -117,12 +125,12 @@ class BaseRequestServicer(client.HTTPClientFactory):
             self.cancel(e)
         except:
             logger.exception('%s onURL failed' % self.request.url)
-        scheme, host, port, path = client._parse(url)
+        scheme, host, port, path = parse(url)
         self.proxy = os.environ.get('%s_proxy' % scheme) or self.request.proxy
         # If a proxy is specified in the environment, or for this
         # particular request, service it with that proxy
         if self.proxy:
-            scheme, host, port, path = client._parse(self.proxy)
+            scheme, host, port, path = parse(self.proxy)
             self.scheme = scheme
             self.host = host
             self.port = port
@@ -428,21 +436,21 @@ class BaseFetcher(object):
                 try:
                     # This is the expansion of the short version getPage
                     # and is taken from twisted's source
-                    parsed = urlparse.urlparse(r.url)
+                    scheme, host, port, path = parse(r.url)
                     factory = BaseRequestServicer(r, self.agent)
                     # If http_proxy or https_proxy, or whatever appropriate proxy
                     # is set, then we should try to honor that. We do so simply 
                     # by overriding the host/port we'll connect to. The client
                     # factory, BaseRequestServicer takes care of the rest
-                    proxy = os.environ.get('%s_proxy' % parsed.scheme)
+                    proxy = os.environ.get('%s_proxy' % scheme)
                     if proxy:
-                        parsed = urlparse.urlparse(proxy)
-                    if parsed.scheme == 'https':
+                        scheme, host, port, path = parse(proxy)
+                    if scheme == 'https':
                         from twisted.internet import ssl
                         contextFactory = ssl.ClientContextFactory()
-                        reactor.connectSSL(parsed.hostname, int(parsed.port or 443), factory, contextFactory)
+                        reactor.connectSSL(host, port or 443, factory, contextFactory)
                     else:
-                        reactor.connectTCP(parsed.hostname, int(parsed.port or 80), factory)
+                        reactor.connectTCP(host, port or 80, factory)
                     factory.deferred.addCallback(r._success, self).addCallback(self._success)
                     factory.deferred.addErrback(r._error, self).addErrback(self._error).addErrback(log.err)
                     factory.deferred.addBoth(r._done, self).addBoth(self._done)
