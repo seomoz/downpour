@@ -189,8 +189,7 @@ class BaseRequest(object):
     followRedirect = 1
     
     def __init__(self, url, data=None, proxy=None):
-        self.url, fragment = urlparse.urldefrag(str(url))
-        self.data = data
+        self.url, fragment = urlparse.urldefrag(url)
         if proxy:
             self.proxy = proxy
     
