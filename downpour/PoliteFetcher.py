@@ -30,11 +30,8 @@ import time
 import reppy
 import redis
 import urlparse
-import threading
 
 class PoliteFetcher(BaseFetcher):
-    requestLock = threading.Lock()
-    
     def __init__(self, poolSize=10, agent=None, stopWhenDone=False, 
         delay=2, allowAll=False, **kwargs):
         
@@ -100,13 +97,7 @@ class PoliteFetcher(BaseFetcher):
     # Event callbacks
     def onDone(self, request):
         # Append this next one onto the pld queue.
-        with self.requestLock:
-            self.retries.append((request._originalKey, time.time() + self.crawlDelay(request)))
-            tostart = len(self.retries)
-            results = zip(self.retries, self.pldQueue.extend(self.retries))
-            self.retries = [val for val, success in results if (success != 1)]
-            logger.debug('Requeued %i / %i in the pldQueue' % (tostart - len(self.retries), tostart))
-            logger.debug('Results : %s' % (repr(results)))
+        self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
     
     # When we try to pop off an empty queue
     def onEmptyQueue(self, key):
@@ -131,6 +122,10 @@ class PoliteFetcher(BaseFetcher):
             r = self.requests.pop()
         logger.debug('Grew by %i' % count)
         return BaseFetcher.grew(self, count)
+    
+    def trim(self, request, trim):
+        # Then, trim that list
+        qr.Queue(self.getKey(request)).trim(trim)
     
     def push(self, request):
         key = self.getKey(request)
