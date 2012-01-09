@@ -267,8 +267,8 @@ class BaseRequest(object):
         return Failure(self)
 
 class RobotsRequest(BaseRequest):
-    def __init__(self, url):
-        BaseRequest.__init__(self, url)
+    def __init__(self, url, *args, **kwargs):
+        BaseRequest.__init__(self, url, *args, **kwargs)
         self.status = 200
         self.ttl    = 3600 * 3
     
@@ -302,7 +302,7 @@ class BaseFetcher(object):
         # numFlight => the number of requests currently active
         # processed => the number of requests completed
         # remaining => how many requests are left
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.numFlight = 0
         self.processed = 0
         self.remaining = 0
@@ -339,6 +339,11 @@ class BaseFetcher(object):
         self.serveNext()
         self.remaining += len(requests)
         return len(requests)
+    
+    def idle(self):
+        '''Returns whether or not this fetcher can handle more work'''
+        with self.lock:
+            return self.numFlight < self.poolSize
     
     # This is a way for the fetcher to let you know that it is capable of
     # handling more requests than are currently enqueued. Returns how much

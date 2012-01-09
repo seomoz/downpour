@@ -75,6 +75,17 @@ class PoliteFetcher(BaseFetcher):
         ''''''
         return len(self.pldQueue) + len(self.requests)
     
+    def idle(self):
+        '''Returns whether or not this fetcher can handle more work'''
+        # Look at when the next item can be fetched
+        next, when = self.pldQueue.peek(withscores=True)
+        # If there is no next item available, then we're idle
+        if not next:
+            return True
+        # Alternatively, we'd only idle if the next request can not
+        # yet be serviced.
+        return when > time.time()
+    
     def getKey(self, req):
         # This actually considers the whole domain name, including subdomains, uniquely
         # This aliasing is just in case we want to change that scheme later, easily
