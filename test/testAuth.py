@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 import unittest
-from downpour import Auth
+from downpour import Auth, AuthException
 
 def strToHeaders(s):
     # This converts the string version of headers to the kind of
@@ -47,7 +47,7 @@ class TestAuth(unittest.TestCase):
             Authenticate: Basic realm="foo"
         ''')
         host = 'flipper.seomoz.org'
-        Auth.register('flipper.seomoz.org', 'foo', 'Aladdin', 'open sesame')
+        Auth.register(host, 'foo', 'Aladdin', 'open sesame')
         self.assertEqual(Auth.auth(host, None, headers), {'Authorization': 'Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=='})
         Auth.unregister(host, 'foo')
         
@@ -55,8 +55,22 @@ class TestAuth(unittest.TestCase):
         headers = strToHeaders('''
             Authenticate: Basic realm="bar"
         ''')
-        host = 'flipper.seomoz.org'
         self.assertEqual(Auth.auth(host, None, headers), {})
+    
+    def test_unsupported(self):
+        # Make sure that unsupported protocols raise an error
+        headers = strToHeaders('''
+            Authenticate: Wacky realm="foo"
+        ''')
+        host = 'flipper.seomoz.org'
+        self.assertRaises(AuthException, Auth.auth, host, None, headers)
+    
+    def test_force_auth(self):
+        # Make sure we can force this to make an auth without the headers
+        host = 'flipper.seomoz.org'
+        Auth.register(host, None, 'Aladdin', 'open sesame')
+        self.assertEqual(Auth.basicAuth({}, host, None, {}), 'Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==')
+        Auth.unregister(host)
     
     def test_proxy_auth(self):
         # First, test the case where we have the particular realm registered
@@ -64,7 +78,7 @@ class TestAuth(unittest.TestCase):
             Proxy-Authenticate: Basic realm="foo"
         ''')
         host = 'flipper.seomoz.org'
-        Auth.register('flipper.seomoz.org', 'foo', 'Aladdin', 'open sesame')
+        Auth.register(host, 'foo', 'Aladdin', 'open sesame')
         self.assertEqual(Auth.auth(host, None, headers), {'Proxy-Authorization': 'Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=='})
         Auth.unregister(host, 'foo')
         
@@ -72,7 +86,6 @@ class TestAuth(unittest.TestCase):
         headers = strToHeaders('''
             Proxy-Authenticate: Basic realm="bar"
         ''')
-        host = 'flipper.seomoz.org'
         self.assertEqual(Auth.auth(host, None, headers), {})        
     
     def test_wild_proxy_auth(self):
