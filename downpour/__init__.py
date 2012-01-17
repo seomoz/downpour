@@ -47,6 +47,7 @@ import os
 import re
 import time
 import reppy
+import base64
 import urlparse
 import threading
 import cPickle as pickle
@@ -83,6 +84,96 @@ def parse(url):
         return client._parse(url)
     except TypeError:
         return client._parse(url.encode('utf-8'))
+
+class AuthException(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __repr__(self):
+        return repr(self.value)
+    def __str__(self):
+        return str(self.value)
+
+class Auth(object):
+    # The purpose of this class is to manage HTTP Authentication user/pass
+    # pairs, and to generate request headers associated with HTTP Auth
+    _auths = {}
+    
+    @staticmethod
+    def _makeKey(host, realm=None):
+        # Given a host, realm, generate the key to store this under
+        if realm:
+            return '%s:%s' % (host, realm)
+        return host
+    
+    @staticmethod
+    def register(host, realm, username, password):
+        # Register a user/pass for a host/realm combination.
+        # If realm is None or False, then this is the default for the
+        # provided host.
+        Auth._auths[Auth._makeKey(host, realm)] = (username, password)
+    
+    @staticmethod
+    def unregister(host, realm=None):
+        # Remove a user/pass for a host/realm combination
+        return Auth._auths.pop(Auth._makeKey(host, realm), None)
+    
+    @staticmethod
+    def get(host, realm=None):
+        # This gets the user/pass pair for the provided host/realm combination
+        # If we can't find one for the specific realm, then we look for any
+        # default user/pass pair registered for the host
+        pair = Auth._auths.get(Auth._makeKey(host, realm), (None, None))
+        if not pair[0]:
+            pair = Auth._auths.get(Auth._makeKey(host, None), (None, None))
+        return pair
+    
+    @staticmethod
+    def auth(host, request, headers):
+        # First, determine what kind of authentication has to happen
+        auth = headers.get('proxy-authenticate', [None])[0]
+        if auth:
+            # And save the request header name
+            authname = 'Proxy-Authorization'
+        else:
+            auth = headers.get('authenticate', [None])[0]
+            if auth:
+                # And save the request header name
+                authname = 'Authorization'
+            else:
+                return {}
+        
+        # With all of that determine, we can do the source-agnostic work
+        chunks = auth.split(' ')
+        method = chunks.pop(0)
+        params = [r.strip().partition('=') for r in chunks]
+        params = dict((r[0], r[2].strip('"')) for r in params)
+        
+        if method.lower() == 'basic':
+            signature = Auth.basicAuth(params, host, request, headers)
+        elif method.lower() == 'digest':
+            # signature = Auth.digestAuth(params, host, request, headers)
+            raise AuthException('Unsupported Auth method: Digest')
+        else:
+            raise AuthException('Unsupported Auth method: %s' % method)
+        
+        if signature:
+            return { authname: signature }
+        else:
+            return {}
+    
+    @staticmethod
+    def basicAuth(params, host, request, headers):
+        auth = Auth.get(host, params.get('realm', None))
+        if auth[0] and auth[1]:
+            raw  = '%s:%s' % auth
+            auth = 'Basic %s' % base64.b64encode(raw).strip()
+            return auth
+        else:
+            return None
+    
+    @staticmethod
+    def digestAuth(params, host, request, headers):
+        return {}
 
 class UserPreemptionError(error.Error):
     '''The exception raised when a user cancels a request'''
