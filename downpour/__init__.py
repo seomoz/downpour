@@ -225,6 +225,13 @@ class BaseRequestServicer(client.HTTPClientFactory):
             self.port = port
             self.path = url
             self.url = url
+            # Now, let's get an auth if there is any for the proxy
+            if port:
+                auth = Auth.basicAuth({}, '%s:%s' % (host, port), None, {})
+            else:
+                auth = Auth.basicAuth({}, host, None, {})
+            if auth:
+                self.headers.setdefault('Proxy-Authorization', auth)
         else:
             try:
                 client.HTTPClientFactory.setURL(self, url)
@@ -542,7 +549,7 @@ class BaseFetcher(object):
                     # is set, then we should try to honor that. We do so simply 
                     # by overriding the host/port we'll connect to. The client
                     # factory, BaseRequestServicer takes care of the rest
-                    proxy = os.environ.get('%s_proxy' % scheme)
+                    proxy = os.environ.get('%s_proxy' % scheme) or r.proxy
                     if proxy:
                         scheme, host, port, path = parse(proxy)
                     if scheme == 'https':
