@@ -375,17 +375,17 @@ class RobotsRequest(BaseRequest):
         self.status = int(status)
         if self.status == 401 or self.status == 403:
             # This means we're forbidden
-            reppy.parse('''User-agent: *\nDisallow: /''', url=self.url, autorefresh=False)
+            reppy.parse('''User-agent: *\nDisallow: /''', url=self.url, autorefresh=False, ttl=self.ttl)
         elif self.status != 200:
             # This means we're going to act like there wasn't one
             logger.warn('No robots.txt => %s' % self.url)
-            reppy.parse('', url=self.url, autorefresh=False)
+            reppy.parse('', url=self.url, autorefresh=False, ttl=self.ttl)
     
     def onSuccess(self, text, fetcher):
-        reppy.parse(text, url=self.url, autorefresh=False)
+        reppy.parse(text, url=self.url, autorefresh=False, ttl=self.ttl)
     
     def onError(self, *args, **kwargs):
-        reppy.parse('', url=self.url, autorefresh=False)
+        reppy.parse('', url=self.url, autorefresh=False, ttl=self.ttl)
 
 class BaseFetcher(object):
     def __init__(self, poolSize=10, agent=None, stopWhenDone=False, grow=5.0):
