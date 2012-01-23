@@ -197,7 +197,7 @@ class BaseRequestServicer(client.HTTPClientFactory):
         self.request = request
         self.request.cached = True
         self.request.time   = -time.time()
-        client.HTTPClientFactory.__init__(self, url=request.url, agent=agent, timeout=request.timeout,
+        client.HTTPClientFactory.__init__(self, url=request.url, agent=agent, headers=request.headers, timeout=request.timeout,
             followRedirect=request.followRedirect, redirectLimit=request.redirectLimit, postdata=self.request.data)
     
     def setURL(self, url):
@@ -283,14 +283,18 @@ class BaseRequest(object):
     time           = 0
     proxy          = None
     timeout        = 45
+    # Any headers that should be sent with the request
+    headers        = {}
     redirectLimit  = 10
     followRedirect = 1
     
-    def __init__(self, url, data=None, proxy=None):
+    def __init__(self, url, data=None, proxy=None, headers=None):
         self.url, fragment = urlparse.urldefrag(url)
         self.data = data
         if proxy:
             self.proxy = proxy
+        if headers:
+            self.headers = headers
     
     def __del__(self):
         # For a brief while, I was having problems with memory leaks, and so 
