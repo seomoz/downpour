@@ -30,7 +30,8 @@ host = 'http://localhost:8080/'
 failures  = []
 successes = []
 
-def run(fetcher):
+def run(fetcher, callback=None, *args, **kwargs):
+    '''Start the fetcher.  After the fetcher finishes, execute callback.'''
     expected = len(fetcher)
     fetcher.stopWhenDone = True
     fetcher.start()
@@ -40,6 +41,8 @@ def run(fetcher):
         print 'PASSED: %s => %s' % (r.name, r.url)
     print 'FAILED %i' % len(failures)
     print 'PASSED %i' % len(successes)
+    if callback:
+        callback(*args, **kwargs)
     if len(failures):
         print 'FAILED.'
         exit(1)
