@@ -95,7 +95,8 @@ class ExamineRequest(UnittestRequest):
         self.examine = examine
         # If it was just a filename, go ahead and append it to
         # the EchoServer's host. Otherwise, use the url
-        UnittestRequest.__init__(self, name, request.url, request.data)
+        UnittestRequest.__init__(self, name, request.url, request.data,
+                request.proxy)
     
     def onHeaders(self, *args, **kwargs):
         self.request.onHeaders(*args, **kwargs)
