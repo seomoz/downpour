@@ -32,6 +32,10 @@ import redis
 import urlparse
 
 class PoliteFetcher(BaseFetcher):
+    # This is the maximum number of parallel requests we can make 
+    # to the same key
+    maxParallelRequests = 5
+    
     def __init__(self, poolSize=10, agent=None, stopWhenDone=False, 
         delay=2, allowAll=False, **kwargs):
         
@@ -70,6 +74,9 @@ class PoliteFetcher(BaseFetcher):
         # For example, if you're checking for allow in other places
         self.allowAll = allowAll
         self.userAgentString = reppy.getUserAgentString(self.agent)
+        # This simply counts the number in flight from a given key
+        from collections import Counter
+        self.flights = Counter()
     
     def __len__(self):
         ''''''
@@ -108,7 +115,22 @@ class PoliteFetcher(BaseFetcher):
     # Event callbacks
     def onDone(self, request):
         # Append this next one onto the pld queue.
-        self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
+        # NOTE:
+        #   This should no longer be necessary, since we won't be
+        #   queueing anything like this, but rather we queue next
+        #   requests when we make one. Instead, we'll decrement the
+        #   flight counts. The only exception is if it's a robots
+        #   request, since subsequent requests will like depend on
+        #   it.
+        # self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
+        if isinstance(request, RobotsRequest):
+            self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
+        # If this request would bring down our parallel requests 
+        # down from the maximum, then we should immediately requeue
+        # the original key to reduce latency.
+        if self.flights[request._originalKey] == self.maxParallelRequests:
+            self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
+        self.flights[request._originalKey] -= 1
     
     # When we try to pop off an empty queue
     def onEmptyQueue(self, key):
@@ -171,6 +193,18 @@ class PoliteFetcher(BaseFetcher):
                 q = qr.Queue(next)
                 
                 if len(q):
+                    # If we've already saturated our parallel requests, then we'll
+                    # wait some short amount of time before we make our next request.
+                    # There is logic elsewhere so that if one of these requests 
+                    # completes before this small amount of time elapses, then it
+                    # will be advanced accordingly.
+                    if self.flights[next] >= self.maxParallelRequests:
+                        self.pldQueue.push(request._originalKey, time.time() + 20)
+                        continue
+                    
+                    # Otherwise, we are making a request to this particular key,
+                    # and we should increment the count we have of parallel requests
+                    self.flights[next] += 1
                     # If the robots for this particular request is not fetched
                     # or it's expired, then we'll have to make a request for it
                     v = q.peek()
@@ -194,11 +228,22 @@ class PoliteFetcher(BaseFetcher):
                         # hostname, when in reality, we should pop off the queue 
                         # for the original hostname.
                         v._originalKey = next
+                        # At this point, we should also schedule the next request
+                        # to this domain.
+                        self.pldQueue.push(next, time.time() + self.crawlDelay(v))
                         return v
                 else:
                     try:
-                        logger.debug('Calling onEmptyQueue for %s' % next)
-                        self.onEmptyQueue(next)
+                        if self.flights[next] == 0:
+                            # If we do not have any requests in flight, then we can
+                            # be certain that we have in fact exhausted all of our
+                            del self.flights[next]
+                            logger.debug('Calling onEmptyQueue for %s' % next)
+                            self.onEmptyQueue(next)
+                        else:
+                            # Otherwise, we should try again in a little bit, and 
+                            # see if the last request has finished.
+                            self.pldQueue.push(next, time.time() + 20)
                     except Exception:
                         logger.exception('onEmptyQueue failed for %s' % next)
                     continue
