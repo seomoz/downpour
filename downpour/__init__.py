@@ -53,9 +53,10 @@ import threading
 import cPickle as pickle
 from twisted import internet
 from twisted.python import log
-from twisted.web import http, client, error
 from twisted.internet import reactor, ssl
 from twisted.python.failure import Failure
+from twisted.web import http, client, error
+from twisted.internet.task import LoopingCall
 
 # Logging
 # We'll have a stream handler and file handler enabled by default, and 
@@ -415,11 +416,45 @@ class BaseFetcher(object):
         self.period       = grow
         # The object that represents our repeated call to grow
         self.growLater = reactor.callLater(self.period, self.grow, self.poolSize)
+        # These are the request servicers that are currently in flight
+        self.servicers = []
+        # This is a looping call to self.timeout
+        self.loopingTimout = LoopingCall(self._timeout)
     
     # This is how subclasses communicate how many requests they have 
     # left to fulfill. 
     def __len__(self):
         return self.remaining
+    
+    # This is a mechanism to ensure that all the timeouts have finished.
+    def _timeout(self):
+        try:
+            # This is the new list of servicers that we'll be using.
+            servicers = []
+            # Then loop through all the servicers that we have out in the field
+            # so to speak, and see which ones have not yet completed, and of those,
+            # which have exhausted their timeout and which have not.
+            now = time.time()
+            for servicer in self.servicers:
+                # Servicer inherits from HTTPClientFactory, and this variable is
+                # one that is initialized to 1 when the request begins getting
+                # serviced, and then set to 0 when the request is completed in
+                # any capacity.
+                if servicer.waiting:
+                    age = servicer.request + now
+                    if servicer.request.timeout > age:
+                        # Raise a timeout error
+                        logger.warn('Twisted Timeout did not fire.')
+                        servicer.cancel(error.TimeoutError(string='No activity on connection after %fs' % age))
+                    else:
+                        servicers.append(servicer)
+            
+            # With this all sorted, we should save our list of servicers
+            self.servicers = servicers
+            
+        except:
+            logger.exception('Timeout enforcer failed')
+            pass
     
     # This is how we get the next request to service. Return None if there
     # is no next request to service. That doesn't have to mean that it's done
@@ -485,6 +520,8 @@ class BaseFetcher(object):
     # These are how you can start and stop the reactor. It's a convenience
     # so that you don't have to import reactor when you want to use this
     def start(self):
+        # We should enforce timeouts within about thirty seconds
+        self.loopingTimout.start(30)
         self.serveNext()
         reactor.run()
 
@@ -566,6 +603,9 @@ class BaseFetcher(object):
                     factory.deferred.addCallback(r._success, self).addCallback(self._success)
                     factory.deferred.addErrback(r._error, self).addErrback(self._error).addErrback(log.err)
                     factory.deferred.addBoth(r._done, self).addBoth(self._done)
+                    # With that set up, we should append this new factory to the list of
+                    # factories for which we're enforcing timeouts
+                    self.servicers.append(factory)
                 except:
                     self.numFlight -= 1
                     logger.exception('Unable to request %s' % r.url)
