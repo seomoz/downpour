@@ -199,7 +199,7 @@ class PoliteFetcher(BaseFetcher):
                     # completes before this small amount of time elapses, then it
                     # will be advanced accordingly.
                     if self.flights[next] >= self.maxParallelRequests:
-                        self.pldQueue.push(request._originalKey, time.time() + 20)
+                        self.pldQueue.push(next, time.time() + 20)
                         continue
                     
                     # Otherwise, we are making a request to this particular key,

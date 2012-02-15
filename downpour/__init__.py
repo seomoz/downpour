@@ -296,6 +296,7 @@ class BaseRequest(object):
     headers        = {}
     redirectLimit  = 10
     followRedirect = 1
+    cached         = False
     
     def __init__(self, url, data=None, proxy=None, headers=None):
         self.url, fragment = urlparse.urldefrag(url)
