@@ -255,7 +255,15 @@ class BaseRequestServicer(client.HTTPClientFactory):
             self.cancel(e)
         except:
             logger.exception('%s onHeaders failed' % self.request.url)
-        client.HTTPClientFactory.gotHeaders(self, headers)
+        # The general gotHeaders stuff
+        try:
+            # Friggin' client.HTTPClientFactory likes to die here when confronted
+            # with invalid set cookie headers. Sure, maybe that's the best practice,
+            # but maybe it's just stupid
+            client.HTTPClientFactory.gotHeaders(self, headers)
+        except:
+            # Ignore all the cookie stuff
+            pass
     
     def gotStatus(self, version, status, message):
         '''Received the HTTP version, status and status message.'''
