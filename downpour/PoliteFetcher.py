@@ -205,8 +205,7 @@ class PoliteFetcher(BaseFetcher):
                         if self.flights[next] >= self.maxParallelRequests:
                             self.pldQueue.push(next, time.time() + 20)
                             continue
-                    
-                        with self.lock:
+                        
                         # Otherwise, we are making a request to this particular key,
                         # and we should increment the count we have of parallel requests
                         self.flights[next] += 1
