@@ -30,6 +30,7 @@ import time
 import reppy
 import redis
 import urlparse
+import threading
 
 class PoliteFetcher(BaseFetcher):
     # This is the maximum number of parallel requests we can make 
@@ -77,6 +78,7 @@ class PoliteFetcher(BaseFetcher):
         # This simply counts the number in flight from a given key
         from collections import Counter
         self.flights = Counter()
+        self.lock = threading.Lock()
     
     def __len__(self):
         ''''''
@@ -123,14 +125,15 @@ class PoliteFetcher(BaseFetcher):
         #   request, since subsequent requests will like depend on
         #   it.
         # self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
-        if isinstance(request, RobotsRequest):
-            self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
-        # If this request would bring down our parallel requests 
-        # down from the maximum, then we should immediately requeue
-        # the original key to reduce latency.
-        if self.flights[request._originalKey] == self.maxParallelRequests:
-            self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
-        self.flights[request._originalKey] -= 1
+        with self.lock:
+            if isinstance(request, RobotsRequest):
+                self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
+            # If this request would bring down our parallel requests 
+            # down from the maximum, then we should immediately requeue
+            # the original key to reduce latency.
+            if self.flights[request._originalKey] == self.maxParallelRequests:
+                self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
+            self.flights[request._originalKey] -= 1
     
     # When we try to pop off an empty queue
     def onEmptyQueue(self, key):
@@ -192,61 +195,63 @@ class PoliteFetcher(BaseFetcher):
                 self.timer = None
                 q = qr.Queue(next)
                 
-                if len(q):
-                    # If we've already saturated our parallel requests, then we'll
-                    # wait some short amount of time before we make our next request.
-                    # There is logic elsewhere so that if one of these requests 
-                    # completes before this small amount of time elapses, then it
-                    # will be advanced accordingly.
-                    if self.flights[next] >= self.maxParallelRequests:
-                        self.pldQueue.push(next, time.time() + 20)
-                        continue
-                    
-                    # Otherwise, we are making a request to this particular key,
-                    # and we should increment the count we have of parallel requests
-                    self.flights[next] += 1
-                    # If the robots for this particular request is not fetched
-                    # or it's expired, then we'll have to make a request for it
-                    v = q.peek()
-                    domain = urlparse.urlparse(v.url).netloc
-                    robot = reppy.findRobot('http://' + domain)
-                    if not self.allowAll and (not robot or robot.expired):
-                        logger.debug('Making robots request for %s' % next)
-                        r = RobotsRequest('http://' + domain + '/robots.txt')
-                        r._originalKey = next
-                        return r
-                    else:
-                        logger.debug('Popping next request from %s' % next)
-                        v = q.pop()
-                        # This was the source of a rather difficult-to-track bug
-                        # wherein the pld queue would slowly drain, despite there
-                        # being plenty of logical queues to draw from. The problem
-                        # was introduced by calling urlparse.urljoin when invoking
-                        # the request's onURL method. As a result, certain redirects
-                        # were making changes to the url, saving it as an updated
-                        # value, but we'd then try to pop off the queue for the new
-                        # hostname, when in reality, we should pop off the queue 
-                        # for the original hostname.
-                        v._originalKey = next
-                        # At this point, we should also schedule the next request
-                        # to this domain.
-                        self.pldQueue.push(next, time.time() + self.crawlDelay(v))
-                        return v
-                else:
-                    try:
-                        if self.flights[next] == 0:
-                            # If we do not have any requests in flight, then we can
-                            # be certain that we have in fact exhausted all of our
-                            del self.flights[next]
-                            logger.debug('Calling onEmptyQueue for %s' % next)
-                            self.onEmptyQueue(next)
-                        else:
-                            # Otherwise, we should try again in a little bit, and 
-                            # see if the last request has finished.
+                with self.lock:
+                    if len(q):
+                        # If we've already saturated our parallel requests, then we'll
+                        # wait some short amount of time before we make our next request.
+                        # There is logic elsewhere so that if one of these requests 
+                        # completes before this small amount of time elapses, then it
+                        # will be advanced accordingly.
+                        if self.flights[next] >= self.maxParallelRequests:
                             self.pldQueue.push(next, time.time() + 20)
-                    except Exception:
-                        logger.exception('onEmptyQueue failed for %s' % next)
-                    continue
+                            continue
+                    
+                        with self.lock:
+                        # Otherwise, we are making a request to this particular key,
+                        # and we should increment the count we have of parallel requests
+                        self.flights[next] += 1
+                        # If the robots for this particular request is not fetched
+                        # or it's expired, then we'll have to make a request for it
+                        v = q.peek()
+                        domain = urlparse.urlparse(v.url).netloc
+                        robot = reppy.findRobot('http://' + domain)
+                        if not self.allowAll and (not robot or robot.expired):
+                            logger.debug('Making robots request for %s' % next)
+                            r = RobotsRequest('http://' + domain + '/robots.txt')
+                            r._originalKey = next
+                            return r
+                        else:
+                            logger.debug('Popping next request from %s' % next)
+                            v = q.pop()
+                            # This was the source of a rather difficult-to-track bug
+                            # wherein the pld queue would slowly drain, despite there
+                            # being plenty of logical queues to draw from. The problem
+                            # was introduced by calling urlparse.urljoin when invoking
+                            # the request's onURL method. As a result, certain redirects
+                            # were making changes to the url, saving it as an updated
+                            # value, but we'd then try to pop off the queue for the new
+                            # hostname, when in reality, we should pop off the queue 
+                            # for the original hostname.
+                            v._originalKey = next
+                            # At this point, we should also schedule the next request
+                            # to this domain.
+                            self.pldQueue.push(next, time.time() + self.crawlDelay(v))
+                            return v
+                    else:
+                        try:
+                            if self.flights[next] == 0:
+                                # If we do not have any requests in flight, then we can
+                                # be certain that we have in fact exhausted all of our
+                                del self.flights[next]
+                                logger.debug('Calling onEmptyQueue for %s' % next)
+                                self.onEmptyQueue(next)
+                            else:
+                                # Otherwise, we should try again in a little bit, and 
+                                # see if the last request has finished.
+                                self.pldQueue.push(next, time.time() + 20)
+                        except Exception:
+                            logger.exception('onEmptyQueue failed for %s' % next)
+                        continue
         return None
         
 if __name__ == '__main__':
