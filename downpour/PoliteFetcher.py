@@ -78,7 +78,7 @@ class PoliteFetcher(BaseFetcher):
         # This simply counts the number in flight from a given key
         from collections import Counter
         self.flights = Counter()
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
     
     def __len__(self):
         ''''''
