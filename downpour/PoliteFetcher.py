@@ -178,7 +178,7 @@ class PoliteFetcher(BaseFetcher):
                     robot = reppy.findRobot('http://' + domain)
                     if not self.allowAll and (not robot or robot.expired):
                         logger.debug('Making robots request for %s' % next)
-                        r = RobotsRequest('http://' + domain + '/robots.txt')
+                        r = RobotsRequest('http://' + domain + '/robots.txt', proxy=v.proxy)
                         r._originalKey = next
                         return r
                     else:

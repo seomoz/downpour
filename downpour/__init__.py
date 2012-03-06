@@ -102,9 +102,14 @@ class Auth(object):
     @staticmethod
     def _makeKey(host, realm=None):
         # Given a host, realm, generate the key to store this under
+        _scheme, _host, _port, _path = parse(host)
+        if _host == '':
+            _scheme, _host, _port, _path = parse('http://' + host)
+        if _port:
+            _host = '%s:%s' % (_host, _port)
         if realm:
-            return '%s:%s' % (host, realm)
-        return host
+            return '%s:%s' % (_host, realm)
+        return _host
     
     @staticmethod
     def register(host, realm, username, password):
