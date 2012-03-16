@@ -78,7 +78,8 @@ class PoliteFetcher(BaseFetcher):
         # This simply counts the number in flight from a given key
         from collections import Counter
         self.flights = Counter()
-        self.lock = threading.RLock()
+        self.lock  = threading.RLock()
+        self.tlock = threading.RLock()
     
     def __len__(self):
         ''''''
@@ -182,11 +183,11 @@ class PoliteFetcher(BaseFetcher):
                 return None
             # If the next-fetchable is not soon enough, then wait
             if when > now:
-                # If we weren't waiting, then wait
-                if self.timer == None:
-                    logger.debug('Waiting %f seconds on %s' % (when - now, next))
-                    self.timer = reactor.callLater(when - now, self.serveNext)
-                return None
+                with self.tlock:
+                    if not (self.timer and self.timer.active()):
+                        logger.debug('Waiting %f seconds on %s' % (when - now, next))
+                        self.timer = reactor.callLater(when - now, self.serveNext)
+                    return None
             else:
                 # Go ahead and pop this item
                 last = next
