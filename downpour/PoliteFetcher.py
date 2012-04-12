@@ -249,6 +249,7 @@ class PoliteFetcher(BaseFetcher):
                                 # Otherwise, we should try again in a little bit, and 
                                 # see if the last request has finished.
                                 self.pldQueue.push(next, time.time() + 20)
+                                logger.debug('Requests still in flight for %s. Waiting' % next)
                         except Exception:
                             logger.exception('onEmptyQueue failed for %s' % next)
                         continue
