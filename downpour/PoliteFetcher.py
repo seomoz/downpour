@@ -196,19 +196,6 @@ class PoliteFetcher(BaseFetcher):
                 self.timer = None
                 q = qr.Queue(next)
                 
-<<<<<<< HEAD
-                if len(q):
-                    # If the robots for this particular request is not fetched
-                    # or it's expired, then we'll have to make a request for it
-                    v = q.peek()
-                    domain = urlparse.urlparse(v.url).netloc
-                    robot = reppy.findRobot('http://' + domain)
-                    if not self.allowAll and (not robot or robot.expired):
-                        logger.debug('Making robots request for %s' % next)
-                        r = RobotsRequest('http://' + domain + '/robots.txt', proxy=v.proxy)
-                        r._originalKey = next
-                        return r
-=======
                 with self.lock:
                     if len(q):
                         # If we've already saturated our parallel requests, then we'll
@@ -250,7 +237,6 @@ class PoliteFetcher(BaseFetcher):
                             # to this domain.
                             self.pldQueue.push(next, time.time() + self.crawlDelay(v))
                             return v
->>>>>>> politeness
                     else:
                         try:
                             if self.flights[next] == 0:
