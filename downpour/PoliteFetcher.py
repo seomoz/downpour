@@ -38,9 +38,9 @@ class Counter(object):
         key = 'flight:' + request._originalKey
         # Just put some dummy value in there. We're mostly interested
         # in the sorted-ness and the zremrangebyrank
-        o = r.zadd(key, time.time() + (request.timeout * 2), request.url)
+        o = r.zadd(key, **{request.url: time.time() + (request.timeout * 2)})
         if r.ttl(key) < (request.timeout * 2):
-            o = r.expire(request.timeout * 2)
+            o = r.expire(key, request.timeout * 2)
         
         return r.zcard(key)
     
@@ -256,8 +256,6 @@ class PoliteFetcher(BaseFetcher):
                         else:
                             logger.debug('Popping next request from %s' % next)
                             v = q.pop()
-                            # Increment the number of requests we currently have in flight
-                            Counter.put(self.r, v)
                             # This was the source of a rather difficult-to-track bug
                             # wherein the pld queue would slowly drain, despite there
                             # being plenty of logical queues to draw from. The problem
@@ -268,6 +266,8 @@ class PoliteFetcher(BaseFetcher):
                             # hostname, when in reality, we should pop off the queue 
                             # for the original hostname.
                             v._originalKey = next
+                            # Increment the number of requests we currently have in flight
+                            Counter.put(self.r, v)
                             # At this point, we should also schedule the next request
                             # to this domain.
                             self.pldQueue.push(next, time.time() + self.crawlDelay(v))
