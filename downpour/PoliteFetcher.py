@@ -32,6 +32,35 @@ import redis
 import urlparse
 import threading
 
+class Counter(object):
+    @staticmethod
+    def put(r, request):
+        key = 'flight:' + request._originalKey
+        # Just put some dummy value in there. We're mostly interested
+        # in the sorted-ness and the zremrangebyrank
+        o = r.zadd(key, time.time() + (request.timeout * 2), request.url)
+        if r.ttl(key) < (request.timeout * 2):
+            o = r.expire(request.timeout * 2)
+        
+        return r.zcard(key)
+    
+    @staticmethod
+    def remove(r, request):
+        key = 'flight:' + request._originalKey
+        with r.pipeline() as p:
+            o = p.zrem(key, request.url)
+            o = p.zremrangebyscore(key, 0, time.time())
+            o = p.zcard(key)
+            return p.execute()[2]
+    
+    @staticmethod
+    def len(r, name):
+        key = 'flight:' + name
+        with r.pipeline() as p:
+            o = p.zremrangebyscore(key, 0, time.time())
+            o = p.zcard(key)
+            return p.execute()[1]
+
 class PoliteFetcher(BaseFetcher):
     # This is the maximum number of parallel requests we can make 
     # to the same key
@@ -48,15 +77,15 @@ class PoliteFetcher(BaseFetcher):
         # each domain waiting to be fetched. Also, include
         # the number of urls from each domain in the count
         # of remaining urls to be fetched.
-        r = redis.Redis(**kwargs)
+        self.r = redis.Redis(**kwargs)
         # Redis has a pipeline feature that allows for bulk
         # requests, the result of which is a list of the 
         # result of each individual request. Thus, only get
         # the length of each of the queues in the pipeline
         # as we're just going to set remaining to the sum
         # of the lengths of each of the domain queues.
-        with r.pipeline() as p:
-            for key in r.keys('domain:*'):
+        with self.r.pipeline() as p:
+            for key in self.r.keys('domain:*'):
                 self.pldQueue.push(key, 0)
                 p.llen(key)
             self.remaining = sum(p.execute())
@@ -75,11 +104,17 @@ class PoliteFetcher(BaseFetcher):
         # For example, if you're checking for allow in other places
         self.allowAll = allowAll
         self.userAgentString = reppy.getUserAgentString(self.agent)
-        # This simply counts the number in flight from a given key
-        from collections import Counter
-        self.flights = Counter()
         self.lock  = threading.RLock()
         self.tlock = threading.RLock()
+        
+        # This needs to actually be kept in Redis, since we anticipate
+        # running more than one process at any one time.
+        #   This used to be self.flights
+        # When we first start fetching, we
+        # Something we have to take into account is resetting this when
+        # we exit. If this gets out of whack, then we could get crawls
+        # stalled.
+        # To 
     
     def __len__(self):
         ''''''
@@ -132,9 +167,8 @@ class PoliteFetcher(BaseFetcher):
             # If this request would bring down our parallel requests 
             # down from the maximum, then we should immediately requeue
             # the original key to reduce latency.
-            if self.flights[request._originalKey] == self.maxParallelRequests:
+            if Counter.remove(self.r, request) == (self.maxParallelRequests - 1):
                 self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
-            self.flights[request._originalKey] -= 1
     
     # When we try to pop off an empty queue
     def onEmptyQueue(self, key):
@@ -203,13 +237,10 @@ class PoliteFetcher(BaseFetcher):
                         # There is logic elsewhere so that if one of these requests 
                         # completes before this small amount of time elapses, then it
                         # will be advanced accordingly.
-                        if self.flights[next] >= self.maxParallelRequests:
+                        if Counter.len(self.r, next) >= self.maxParallelRequests:
                             self.pldQueue.push(next, time.time() + 20)
                             continue
                         
-                        # Otherwise, we are making a request to this particular key,
-                        # and we should increment the count we have of parallel requests
-                        self.flights[next] += 1
                         # If the robots for this particular request is not fetched
                         # or it's expired, then we'll have to make a request for it
                         v = q.peek()
@@ -219,10 +250,14 @@ class PoliteFetcher(BaseFetcher):
                             logger.debug('Making robots request for %s' % next)
                             r = RobotsRequest('http://' + domain + '/robots.txt')
                             r._originalKey = next
+                            # Increment the number of requests we currently have in flight
+                            Counter.put(self.r, r)
                             return r
                         else:
                             logger.debug('Popping next request from %s' % next)
                             v = q.pop()
+                            # Increment the number of requests we currently have in flight
+                            Counter.put(self.r, v)
                             # This was the source of a rather difficult-to-track bug
                             # wherein the pld queue would slowly drain, despite there
                             # being plenty of logical queues to draw from. The problem
@@ -239,10 +274,7 @@ class PoliteFetcher(BaseFetcher):
                             return v
                     else:
                         try:
-                            if self.flights[next] == 0:
-                                # If we do not have any requests in flight, then we can
-                                # be certain that we have in fact exhausted all of our
-                                del self.flights[next]
+                            if Counter.len(self.r, next) == 0:
                                 logger.debug('Calling onEmptyQueue for %s' % next)
                                 self.onEmptyQueue(next)
                             else:
