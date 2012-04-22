@@ -41,8 +41,11 @@ class Counter(object):
         o = r.zadd(key, **{request.url: time.time() + (request.timeout * 2)})
         if r.ttl(key) < (request.timeout * 2):
             o = r.expire(key, request.timeout * 2)
+            logger.error('Exprire %s %fs: %s' % (key, request.timeout * 2, repr(o)))
         
-        return r.zcard(key)
+        o = r.zcard(key)
+        logger.error('Put %s (%s) to expire at %fs; zcard = %d' % (request.url, request._originalKey, (time.time() + request.timeout * 2), o))
+        return o
     
     @staticmethod
     def remove(r, request):
@@ -51,7 +54,10 @@ class Counter(object):
             o = p.zrem(key, request.url)
             o = p.zremrangebyscore(key, 0, time.time())
             o = p.zcard(key)
-            return p.execute()[2]
+            o, removed, card = p.execute()
+        
+        logger.error('Remove %s (%s); Removed: %d; zcard = %d' % (request.url, request._originalKey, removed, card))
+        return card
     
     @staticmethod
     def len(r, name):
@@ -59,7 +65,11 @@ class Counter(object):
         with r.pipeline() as p:
             o = p.zremrangebyscore(key, 0, time.time())
             o = p.zcard(key)
-            return p.execute()[1]
+            
+            removed, card = p.execute()
+        
+        logger.error('Len %s; Removed: %d; zcard = %d' % (key, removed, card))
+        return card
 
 class PoliteFetcher(BaseFetcher):
     # This is the maximum number of parallel requests we can make 
@@ -173,6 +183,10 @@ class PoliteFetcher(BaseFetcher):
     # When we try to pop off an empty queue
     def onEmptyQueue(self, key):
         pass
+    
+    # How many are in flight from this particular key?
+    def inFlight(self, key):
+        return Counter.len(self.r, key)
     
     #################
     # Insertion to our queue
