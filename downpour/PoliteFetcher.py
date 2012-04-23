@@ -41,10 +41,10 @@ class Counter(object):
         o = r.zadd(key, **{request.url: time.time() + (request.timeout * 2)})
         if r.ttl(key) < (request.timeout * 2):
             o = r.expire(key, request.timeout * 2)
-            logger.error('Exprire %s %fs: %s' % (key, request.timeout * 2, repr(o)))
+            # logger.debug('Exprire %s %fs: %s' % (key, request.timeout * 2, repr(o)))
         
         o = r.zcard(key)
-        logger.error('Put %s (%s) to expire at %fs; zcard = %d' % (request.url, request._originalKey, (time.time() + request.timeout * 2), o))
+        # logger.debug('Put %s (%s) to expire at %fs; zcard = %d' % (request.url, request._originalKey, (time.time() + request.timeout * 2), o))
         return o
     
     @staticmethod
@@ -56,7 +56,7 @@ class Counter(object):
             o = p.zcard(key)
             o, removed, card = p.execute()
         
-        logger.error('Remove %s (%s); Removed: %d; zcard = %d' % (request.url, request._originalKey, removed, card))
+        # logger.debug('Remove %s (%s); Removed: %d; zcard = %d' % (request.url, request._originalKey, removed, card))
         return card
     
     @staticmethod
@@ -68,7 +68,7 @@ class Counter(object):
             
             removed, card = p.execute()
         
-        logger.error('Len %s; Removed: %d; zcard = %d' % (key, removed, card))
+        # logger.debug('Len %s; Removed: %d; zcard = %d' % (key, removed, card))
         return card
 
 class PoliteFetcher(BaseFetcher):
