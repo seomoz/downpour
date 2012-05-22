@@ -447,14 +447,16 @@ class BaseFetcher(object):
     def push(self, request):
         self.requests.append(request)
         self.serveNext()
-        self.remaining += 1
+        with self.lock:
+            self.remaining += 1
         return 1
     
     # This is how to fetch several more requests
     def extend(self, requests):
         self.requests.extend(requests)
         self.serveNext()
-        self.remaining += len(requests)
+        with self.lock:
+            self.remaining += len(requests)
         return len(requests)
     
     def idle(self):
