@@ -6,10 +6,24 @@ from twisted.web import server, resource, static, http
 
 headerMatch = re.compile(r'([^:]+):([^\r]+)$')
 
+def compress(body, content_encoding):
+    if content_encoding == 'gzip':
+        import gzip
+        from cStringIO import StringIO
+        io = StringIO()
+        f  = gzip.GzipFile(fileobj=io, mode='wb')
+        f.write(body)
+        f.close()
+        return io.getvalue()
+    elif content_encoding in ('zlib', 'deflate'):
+        import zlib
+        return zlib.compress(body)
+
 def cleanHeaders(content):
     headers  = []
     body     = []
     encoding = None
+    content_encoding = None
     content  = content.split('\r\n')
     # If there were no headers according to this, then...
     if len(content) == 1:
@@ -26,10 +40,20 @@ def cleanHeaders(content):
                     t, sep, charset = value.partition('; charset=')
                     if charset:
                         encoding = charset
+                if name == 'Content-Encoding':
+                    content_encoding = value
             else:
                 body.append(line)
         if encoding:
             body = '\n'.join(body).decode('utf-8').encode(encoding)
+            if content_encoding in ('gzip', 'zlib', 'deflate'):
+                body = compress(body, content_encoding)
+            
+            for i in range(len(headers)):
+                if headers[i].partition(':')[0] == 'Content-Length':
+                    headers[i] = 'Content-Length: %i' % (len(body))
+        elif content_encoding in ('gzip', 'zlib', 'deflate'):
+            body = compress('\n'.join(body), content_encoding)
             for i in range(len(headers)):
                 if headers[i].partition(':')[0] == 'Content-Length':
                     headers[i] = 'Content-Length: %i' % (len(body))
