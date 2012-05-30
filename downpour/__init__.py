@@ -200,9 +200,10 @@ class BaseRequestServicer(client.HTTPClientFactory):
     and `onStatus` are supported.'''
     def __init__(self, request, agent):
         '''Provide the request to service, and the user agent to identify with.'''
-        self.request = request
-        self.request.cached = True
-        self.request.time   = -time.time()
+        self.request          = request
+        self.request.cached   = True
+        self.request.time     = -time.time()
+        self.request.encoding = None
         client.HTTPClientFactory.__init__(self, url=request.url, agent=agent, headers=request.headers, timeout=request.timeout,
             followRedirect=request.followRedirect, redirectLimit=request.redirectLimit, postdata=self.request.data)
 
@@ -251,11 +252,13 @@ class BaseRequestServicer(client.HTTPClientFactory):
     def gotHeaders(self, headers):
         '''Received headers, a dictionary of lists.'''
         try:
-            self.request.onHeaders(headers)
             # This request is marked as cached iff every request was served out
             # of the cache specified, and it was a hit.
             cached = self.proxy and ('HIT from %s' % self.host) in ';'.join(headers.get('x-cache', ''))
             self.request.cached = self.request.cached and cached
+            # Set the request's encoding, if applicable
+            self.request.encoding = ';'.join(headers.get('content-encoding', ['identity']))
+            self.request.onHeaders(headers)
         except UserPreemptionError as e:
             self.cancel(e)
         except:
@@ -302,7 +305,8 @@ class BaseRequest(object):
     redirectLimit  = 10
     followRedirect = 1
     cached         = False
-
+    encoding       = 'identity'
+    
     def __init__(self, url, data=None, proxy=None, headers=None):
         self.url, fragment = urlparse.urldefrag(url)
         self.data = data
@@ -365,6 +369,15 @@ class BaseRequest(object):
         try:
             self.time += time.time()
             logger.info('Successfully fetched %s in %fs' % (self.url, self.time))
+            if self.encoding == 'gzip':
+                import gzip
+                from cStringIO import StringIO
+                logger.info('Decompressing gzip-encoded content')
+                response = gzip.GzipFile(fileobj=StringIO(response)).read()
+            elif self.encoding in ('zlib', 'deflate'):
+                import zlib
+                logger.info('Decompressing deflate-encoded content')
+                response = zlib.decompress(response)
             self.onSuccess(response, fetcher)
         except Exception as e:
             logger.exception('Request success handler failed')
