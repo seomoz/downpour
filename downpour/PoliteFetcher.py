@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 #
 # Copyright (c) 2011 SEOmoz
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
 # "Software"), to deal in the Software without restriction, including
@@ -9,10 +9,10 @@
 # distribute, sublicense, and/or sell copies of the Software, and to
 # permit persons to whom the Software is furnished to do so, subject to
 # the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be
 # included in all copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 # EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 # MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -42,11 +42,11 @@ class Counter(object):
         if r.ttl(key) < (request.timeout * 2):
             o = r.expire(key, request.timeout * 2)
             # logger.debug('Exprire %s %fs: %s' % (key, request.timeout * 2, repr(o)))
-        
+
         o = r.zcard(key)
         # logger.debug('Put %s (%s) to expire at %fs; zcard = %d' % (request.url, request._originalKey, (time.time() + request.timeout * 2), o))
         return o
-    
+
     @staticmethod
     def remove(r, request):
         key = 'flight:' + request._originalKey
@@ -55,30 +55,30 @@ class Counter(object):
             o = p.zremrangebyscore(key, 0, time.time())
             o = p.zcard(key)
             o, removed, card = p.execute()
-        
+
         # logger.debug('Remove %s (%s); Removed: %d; zcard = %d' % (request.url, request._originalKey, removed, card))
         return card
-    
+
     @staticmethod
     def len(r, name):
         key = 'flight:' + name
         with r.pipeline() as p:
             o = p.zremrangebyscore(key, 0, time.time())
             o = p.zcard(key)
-            
+
             removed, card = p.execute()
-        
+
         # logger.debug('Len %s; Removed: %d; zcard = %d' % (key, removed, card))
         return card
 
 class PoliteFetcher(BaseFetcher):
-    # This is the maximum number of parallel requests we can make 
+    # This is the maximum number of parallel requests we can make
     # to the same key
     maxParallelRequests = 5
-    
-    def __init__(self, poolSize=10, agent=None, stopWhenDone=False, 
+
+    def __init__(self, poolSize=10, agent=None, stopWhenDone=False,
         delay=2, allowAll=False, **kwargs):
-        
+
         # Call the parent constructor
         BaseFetcher.__init__(self, poolSize, agent, stopWhenDone)
         # Include a priority queue of plds
@@ -89,7 +89,7 @@ class PoliteFetcher(BaseFetcher):
         # of remaining urls to be fetched.
         self.r = redis.Redis(**kwargs)
         # Redis has a pipeline feature that allows for bulk
-        # requests, the result of which is a list of the 
+        # requests, the result of which is a list of the
         # result of each individual request. Thus, only get
         # the length of each of the queues in the pipeline
         # as we're just going to set remaining to the sum
@@ -99,7 +99,7 @@ class PoliteFetcher(BaseFetcher):
                 self.pldQueue.push(key, 0)
                 p.llen(key)
             self.remaining = sum(p.execute())
-        # For whatever reason, pushing key names back into the 
+        # For whatever reason, pushing key names back into the
         # priority queue has been problematic. As such, we'll
         # set them aside as they fail, and then retry them at
         # some point. Like when the next request finishes.
@@ -116,7 +116,7 @@ class PoliteFetcher(BaseFetcher):
         self.userAgentString = reppy.getUserAgentString(self.agent)
         self.lock  = threading.RLock()
         self.tlock = threading.RLock()
-        
+
         # This needs to actually be kept in Redis, since we anticipate
         # running more than one process at any one time.
         #   This used to be self.flights
@@ -124,12 +124,12 @@ class PoliteFetcher(BaseFetcher):
         # Something we have to take into account is resetting this when
         # we exit. If this gets out of whack, then we could get crawls
         # stalled.
-        # To 
-    
+        # To
+
     def __len__(self):
         ''''''
         return len(self.pldQueue) + len(self.requests)
-    
+
     def idle(self):
         '''Returns whether or not this fetcher can handle more work'''
         # Look at when the next item can be fetched
@@ -140,17 +140,17 @@ class PoliteFetcher(BaseFetcher):
         # Alternatively, we'd only idle if the next request can not
         # yet be serviced.
         return when > time.time()
-    
+
     def getKey(self, req):
         # This actually considers the whole domain name, including subdomains, uniquely
         # This aliasing is just in case we want to change that scheme later, easily
         return 'domain:%s' % urlparse.urlparse(req.url.strip()).hostname
-    
+
     def allowed(self, url):
         '''Are we allowed to fetch this url/urls?'''
         logger.warn('Allowed? %s' % url)
         return self.allowAll or reppy.allowed(url, self.agent, self.userAgentString)
-    
+
     def crawlDelay(self, request):
         '''How long to wait before getting the next page from this domain?'''
         # No delay for requests that were serviced from cache
@@ -159,7 +159,7 @@ class PoliteFetcher(BaseFetcher):
         # Return the crawl delay for this particular url if there is one
         return (self.allowAll and self.delay) or reppy.crawlDelay(request.url, self.agent) or self.delay
         # return self.delay
-    
+
     # Event callbacks
     def onDone(self, request):
         # Append this next one onto the pld queue.
@@ -174,20 +174,20 @@ class PoliteFetcher(BaseFetcher):
         with self.lock:
             if isinstance(request, RobotsRequest):
                 self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
-            # If this request would bring down our parallel requests 
+            # If this request would bring down our parallel requests
             # down from the maximum, then we should immediately requeue
             # the original key to reduce latency.
             if Counter.remove(self.r, request) == (self.maxParallelRequests - 1):
                 self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
-    
+
     # When we try to pop off an empty queue
     def onEmptyQueue(self, key):
         pass
-    
+
     # How many are in flight from this particular key?
     def inFlight(self, key):
         return Counter.len(self.r, key)
-    
+
     #################
     # Insertion to our queue
     #################
@@ -197,7 +197,7 @@ class PoliteFetcher(BaseFetcher):
         for r in requests:
             count += self.push(r) or 0
         return count
-    
+
     def grow(self, upto=10000):
         count = 0
         t = time.time()
@@ -207,11 +207,11 @@ class PoliteFetcher(BaseFetcher):
             r = self.requests.pop()
         logger.debug('Grew by %i' % count)
         return BaseFetcher.grew(self, count)
-    
+
     def trim(self, request, trim):
         # Then, trim that list
         qr.Queue(self.getKey(request)).trim(trim)
-    
+
     def push(self, request):
         key = self.getKey(request)
         q = qr.Queue(key)
@@ -220,7 +220,7 @@ class PoliteFetcher(BaseFetcher):
         q.push(request)
         self.remaining += 1
         return 1
-    
+
     def pop(self):
         '''Get the next request'''
         now = time.time()
@@ -243,18 +243,18 @@ class PoliteFetcher(BaseFetcher):
                 # Unset the timer
                 self.timer = None
                 q = qr.Queue(next)
-                
+
                 with self.lock:
                     if len(q):
                         # If we've already saturated our parallel requests, then we'll
                         # wait some short amount of time before we make our next request.
-                        # There is logic elsewhere so that if one of these requests 
+                        # There is logic elsewhere so that if one of these requests
                         # completes before this small amount of time elapses, then it
                         # will be advanced accordingly.
                         if Counter.len(self.r, next) >= self.maxParallelRequests:
                             self.pldQueue.push(next, time.time() + 20)
                             continue
-                        
+
                         # If the robots for this particular request is not fetched
                         # or it's expired, then we'll have to make a request for it
                         v = q.peek()
@@ -277,7 +277,7 @@ class PoliteFetcher(BaseFetcher):
                             # the request's onURL method. As a result, certain redirects
                             # were making changes to the url, saving it as an updated
                             # value, but we'd then try to pop off the queue for the new
-                            # hostname, when in reality, we should pop off the queue 
+                            # hostname, when in reality, we should pop off the queue
                             # for the original hostname.
                             v._originalKey = next
                             # Increment the number of requests we currently have in flight
@@ -292,7 +292,7 @@ class PoliteFetcher(BaseFetcher):
                                 logger.debug('Calling onEmptyQueue for %s' % next)
                                 self.onEmptyQueue(next)
                             else:
-                                # Otherwise, we should try again in a little bit, and 
+                                # Otherwise, we should try again in a little bit, and
                                 # see if the last request has finished.
                                 self.pldQueue.push(next, time.time() + 20)
                                 logger.debug('Requests still in flight for %s. Waiting' % next)
@@ -300,11 +300,11 @@ class PoliteFetcher(BaseFetcher):
                             logger.exception('onEmptyQueue failed for %s' % next)
                         continue
         return None
-        
+
 if __name__ == '__main__':
     import logging
     from downpour import BaseRequest
-    
+
     # Turn on logging
     logger.setLevel(logging.DEBUG)
 
@@ -312,6 +312,6 @@ if __name__ == '__main__':
     with file('urls.txt') as f:
         for line in f:
             q.push(BaseRequest(line.strip()))
-    
+
     p = PoliteFetcher(100)
     p.start()
