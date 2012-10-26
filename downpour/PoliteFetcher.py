@@ -268,8 +268,18 @@ class PoliteFetcher(BaseFetcher):
                             Counter.put(self.r, r)
                             return r
                         else:
+                            # If this was a new domain at the time of finding
+                            # this link in the referring page, we didn't have
+                            # the robots.txt data handy for that domain and
+                            # thus could not tell if the URL in question had
+                            # been prohibited by that robots.txt file. So it
+                            # might be a prohibited URL which got enqueued by
+                            # mistake. If so, discard it.
                             logger.debug('Popping next request from %s' % next)
                             v = q.pop()
+                            if not self.allowAll and v is not None and not robot.allowed(v.url, self.userAgentString):
+                                logger.debug('%s prohibited; discarding.' % repr(v.url))
+                                return self.pop()
                             # This was the source of a rather difficult-to-track bug
                             # wherein the pld queue would slowly drain, despite there
                             # being plenty of logical queues to draw from. The problem
