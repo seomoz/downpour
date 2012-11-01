@@ -221,7 +221,7 @@ class PoliteFetcher(BaseFetcher):
         self.remaining += 1
         return 1
     
-    def pop(self):
+    def pop(self, polite=True):
         '''Get the next request'''
         now = time.time()
         while True:
@@ -230,7 +230,7 @@ class PoliteFetcher(BaseFetcher):
             if not next:
                 return None
             # If the next-fetchable is not soon enough, then wait
-            if when > now:
+            if polite and when > now:
                 with self.tlock:
                     if not (self.timer and self.timer.active()):
                         logger.debug('Waiting %f seconds on %s' % (when - now, next))
