@@ -369,7 +369,7 @@ class BaseRequest(object):
         try:
             self.time += time.time()
             logger.info('Successfully fetched %s in %fs' % (self.url, self.time))
-            if self.encoding == 'gzip':
+            if self.encoding in ('gzip', 'x-gzip'):
                 import gzip
                 from cStringIO import StringIO
                 logger.info('Decompressing gzip-encoded content')
