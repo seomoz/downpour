@@ -155,10 +155,12 @@ class PoliteFetcher(BaseFetcher):
         '''How long to wait before getting the next page from this domain?'''
         # No delay for requests that were serviced from cache
         if request.cached:
+            logger.debug('Using delay of %fs' % 0.0)
             return 0
         # Return the crawl delay for this particular url if there is one
-        return (self.allowAll and self.delay) or reppy.crawlDelay(request.url, self.agent) or self.delay
-        # return self.delay
+        ret = (self.allowAll and self.delay) or reppy.crawlDelay(request.url, self.agent) or self.delay
+        logger.debug('Using delay of %fs' % ret)
+        return ret
     
     # Event callbacks
     def onDone(self, request):
@@ -228,6 +230,7 @@ class PoliteFetcher(BaseFetcher):
             # Get the next plds we might want to fetch from
             next, when = self.pldQueue.peek(withscores=True)
             if not next:
+                logger.debug('Nothing in pldQueue.')
                 return None
             # If the next-fetchable is not soon enough, then wait
             if polite and when > now:
@@ -235,12 +238,19 @@ class PoliteFetcher(BaseFetcher):
                     if not (self.timer and self.timer.active()):
                         logger.debug('Waiting %f seconds on %s' % (when - now, next))
                         self.timer = reactor.callLater(when - now, self.serveNext)
+                    else:
+                        desired = when - now
+                        actual = self.timer.getTime() - now
+                        logger.debug('Desired wait = %f, actual = %f on %s' % (desired, actual, next))
                     return None
             else:
                 # Go ahead and pop this item
                 last = next
                 next = self.pldQueue.pop()
                 # Unset the timer
+                if self.timer and self.timer.active():
+                    delta = self.timer.getTime() - now
+                    logger.warn('Call in %fs slipped through the cracks.' % delta)
                 self.timer = None
                 q = qr.Queue(next)
                 
@@ -299,6 +309,7 @@ class PoliteFetcher(BaseFetcher):
                         except Exception:
                             logger.exception('onEmptyQueue failed for %s' % next)
                         continue
+        logger.debug('Returning None (should not happen).')
         return None
         
 if __name__ == '__main__':
