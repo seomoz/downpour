@@ -56,6 +56,7 @@ from twisted.python import log
 from twisted.web import http, client, error
 from twisted.internet import reactor, ssl
 from twisted.python.failure import Failure
+from zlib import crc32
 
 # Logging
 # We'll have a stream handler and file handler enabled by default, and
@@ -75,6 +76,12 @@ handler = handlers.RotatingFileHandler('/var/log/downpour.log', 'a+', maxBytes=1
 handler.setLevel(logging.DEBUG)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+# Log a witness to the content of a successful response
+def _log_page_crc(url, text):
+    octets = len(text)
+    crc = crc32(text) & 0xffffffff
+    logger.info("%d octet%s, CRC is %d for %s" % (octets, '' if octets == 1 else 's', crc, url))
 
 # Twisted has an observer for logging twisted's errors
 observer = log.PythonLoggingObserver()
@@ -378,6 +385,7 @@ class BaseRequest(object):
                 import zlib
                 logger.info('Decompressing deflate-encoded content')
                 response = zlib.decompress(response)
+            _log_page_crc(self.url, response)
             self.onSuccess(response, fetcher)
         except Exception as e:
             logger.exception('Request success handler failed')
