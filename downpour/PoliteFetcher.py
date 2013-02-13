@@ -120,9 +120,6 @@ class PLDQueue(qr.PriorityQueue):
         if v < self._PH_MIN:
             raise ValueError('Attempt to clear an active PLD.')
         self.redis.zrem(self.key, packed)
-        
-class PoliteRobotsRequest(RobotsRequest):
-    # Not finished
 
 class PoliteFetcher(BaseFetcher):
     # This is the maximum number of parallel requests we can make
