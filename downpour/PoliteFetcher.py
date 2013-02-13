@@ -24,6 +24,7 @@
 '''Politely (per pay-level-domain) fetch urls'''
 
 from downpour import BaseFetcher, RobotsRequest, logger, reactor
+import Robots
 
 import qr
 import sys
@@ -119,6 +120,9 @@ class PLDQueue(qr.PriorityQueue):
         if v < self._PH_MIN:
             raise ValueError('Attempt to clear an active PLD.')
         self.redis.zrem(self.key, packed)
+        
+class PoliteRobotsRequest(RobotsRequest):
+    # Not finished
 
 class PoliteFetcher(BaseFetcher):
     # This is the maximum number of parallel requests we can make
@@ -203,8 +207,10 @@ class PoliteFetcher(BaseFetcher):
 
     def allowed(self, url):
         '''Are we allowed to fetch this url/urls?'''
-        logger.warn('Allowed? %s' % url)
-        return self.allowAll or reppy.allowed(url, self.agent, self.userAgentString)
+        # This should be deadwood, so log a warning if something calls it.
+        logger.warn('PoliteFetcher.allowed called, using EXPIRED_OR_DUMMY mode.')
+        r = Robots.retrieve(url, Robots.EXPIRED_OR_DUMMY)
+        return self.allowAll or r.allowed(url, self.userAgentString)
 
     def crawlDelay(self, request):
         '''How long to wait before getting the next page from this domain?'''
@@ -213,7 +219,8 @@ class PoliteFetcher(BaseFetcher):
             logger.debug('Using delay of %fs' % 0.0)
             return 0
         # Return the crawl delay for this particular url if there is one
-        ret = (self.allowAll and self.delay) or reppy.crawlDelay(request.url, self.agent) or self.delay
+        r = Robots.retrieve(request.url, Robots.EXPIRED_OR_DUMMY)
+        ret = (self.allowAll and self.delay) or r.crawlDelay(self.agent) or self.delay
         logger.debug('Using delay of %fs' % ret)
         return ret
 
@@ -336,11 +343,15 @@ class PoliteFetcher(BaseFetcher):
                     # If the robots for this particular request is not fetched
                     # or it's expired, then we'll have to make a request for it
                     v = q.peek()
-                    domain = urlparse.urlparse(v.url).netloc
-                    robot = reppy.findRobot('http://' + domain)
-                    if not self.allowAll and (not robot or robot.expired):
+                    robot = Robots.retrieve(v.url, Robots.NONE)
+                    if not self.allowAll and robot is None:
                         logger.debug('Making robots request for %s' % next)
-                        r = RobotsRequest('http://' + domain + '/robots.txt')
+                        domain = urlparse.urlparse(v.url).netloc
+                        r = Robots.request('http://' + domain + '/robots.txt', proxy=v.proxy)
+                        if r is None:
+                            # Oops! Just lost a race.
+                            logger.debug('Robots request for %s cancelled.' % next)
+                            return None
                         r._originalKey = next
                         # Increment the number of requests we currently have in flight
                         Counter.put(self.r, r)
