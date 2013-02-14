@@ -102,7 +102,9 @@ def request(url, *args, **kwargs):
     # present and valid.
     domain = urlparse.urlparse(url).netloc
     with _rlock:
-        if domain in _pending or retrieve(url, NONE):
+        oldreq = reppy.findRobot(url)
+        unneeded = oldreq is not None and not oldreq.is_expired(peek=True)
+        if domain in _pending or unneeded:
             return None
         _pending[domain] = time.time()
     # Autorefresh must be false lest nasty race conditions result.
