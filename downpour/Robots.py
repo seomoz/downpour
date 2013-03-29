@@ -46,7 +46,7 @@ class PoliteRobotsRequest(RobotsRequest):
             _pending[domain] = time.time()
         self._updated = False
 
-    def _update(body):
+    def _update(self, body):
         # First, make reppy do all the dirty work or parsing and caching it
         reppy.parse(body, url=self.url, ttl=self.ttl, autorefresh=False)
         # Then, clear the pending flag for this domain. If we get a KeyError
