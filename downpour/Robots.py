@@ -40,6 +40,10 @@ _dummy = reppy.parse('', autorefresh=False, ttl=86400*365)
 class PoliteRobotsRequest(RobotsRequest):
     def __init__(self, url, *args, **kwargs):
         RobotsRequest.__init__(self, url, *args, **kwargs)
+        # Initialize the state of this request.
+        domain = urlparse.urlparse(url).netloc
+        with _rlock:
+            _pending[domain] = time.time()
         self._updated = False
 
     def _update(body):
@@ -48,7 +52,7 @@ class PoliteRobotsRequest(RobotsRequest):
         # Then, clear the pending flag for this domain. If we get a KeyError
         # doing this, it is bad news because it means we have a race condition
         # somewhere.
-        domain = urlparse.urlparse(url).netloc
+        domain = urlparse.urlparse(self.url).netloc
         with _rlock:
             del _pending[domain]
         self._updated = True
@@ -106,7 +110,5 @@ def request(url, *args, **kwargs):
         unneeded = oldreq is not None and not oldreq.is_expired(peek=True)
         if domain in _pending or unneeded:
             return None
-        _pending[domain] = time.time()
-    # Autorefresh must be false lest nasty race conditions result.
-    kwargs['autorefresh'] = False
-    return PoliteRobotsRequest(url, *args, **kwargs)
+        else:
+            return PoliteRobotsRequest(url, *args, **kwargs)
