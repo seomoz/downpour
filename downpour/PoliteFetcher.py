@@ -120,6 +120,10 @@ class PLDQueue(qr.PriorityQueue):
             raise ValueError('Attempt to clear an active PLD.')
         self.redis.zrem(self.key, packed)
 
+    # Nuke an entry whether or not it is a placeholder.
+    def clear(self, value):
+        return self.redis.zrem(self.key, self._pack(value))
+
 class PoliteFetcher(BaseFetcher):
     # This is the maximum number of parallel requests we can make
     # to the same key
@@ -387,6 +391,13 @@ class PoliteFetcher(BaseFetcher):
 
         logger.debug('Returning None (should not happen).')
         return None
+
+    # For Downpour, clearing a campaign is strictly limited to ensuring any
+    # pldQueue entry for it is completely gone.
+    def clearCampaign(self, jid):
+        key = 'domain:' + jid
+        with self.pld_lock:
+            self.pldQueue.clear(key)
 
 if __name__ == '__main__':
     import logging
