@@ -341,7 +341,7 @@ class PoliteFetcher(BaseFetcher):
                     # or it's expired, then we'll have to make a request for it
                     v = q.peek()
                     robot = Robots.retrieve(v.url, Robots.NONE)
-                    if not isinstance(next, RobotsRequest) and not self.allowAll and robot is None:
+                    if not isinstance(v, RobotsRequest) and not self.allowAll and robot is None:
                         logger.debug('Making robots request for %s' % next)
                         domain = urlparse.urlparse(v.url).netloc
                         r = Robots.request('http://' + domain + '/robots.txt', proxy=v.proxy)
