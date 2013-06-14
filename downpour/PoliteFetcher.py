@@ -228,6 +228,7 @@ class PoliteFetcher(BaseFetcher):
         #   request, since subsequent requests will like depend on
         #   it.
         # self.pldQueue.push(request._originalKey, time.time() + self.crawlDelay(request))
+        logger.info("PoliteFetcher.onDone called for %s" % request.url)
         with self.pld_lock:
             if isinstance(request, RobotsRequest):
                 self.pldQueue.push_unique(request._originalKey, time.time() + self.crawlDelay(request))
