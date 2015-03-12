@@ -1,3 +1,17 @@
+![Status: Deprecated](https://img.shields.io/badge/status-deprecated-green.svg?style=flat)
+![Team: Big Data](https://img.shields.io/badge/team-big_data-green.svg?style=flat)
+![Scope: Internal](https://img.shields.io/badge/scope-internal-lightgrey.svg?style=flat)
+![Product: None (deprecated)](https://img.shields.io/badge/products-none_%28deprecated%29-blue.svg?style=flat)
+![Open Source: Unknown](https://img.shields.io/badge/open_source-unknown-orange.svg?style=flat)
+![Critical Code: No](https://img.shields.io/badge/critical-no-red.svg?style=flat)
+
+Main purpose: Twisted-based crawler  
+E-Mail: [dan@moz.com](mailto:dan@moz.com)  
+MOZ Package Dependencies: reppy, qr  
+Open Source Dependencies: twisted  
+
+----------
+
 Downpour
 ========
 
